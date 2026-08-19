@@ -14,6 +14,21 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
+def _get_secret(key: str, default: str | None = None) -> str | None:
+    """Safely retrieves a configuration key or API key from os.environ,
+    Streamlit secrets (st.secrets), or a default fallback."""
+    val = os.getenv(key)
+    if val:
+        return val
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return default
+
+
 class BaseLLMClient(ABC):
     @abstractmethod
     def generate_text(
@@ -38,8 +53,11 @@ class BaseLLMClient(ABC):
 class AnthropicClient(BaseLLMClient):
     def __init__(self, api_key: str | None = None, model: str | None = None):
         from anthropic import Anthropic
-        self.client = Anthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
-        self.model = model or os.getenv("JOBSCOUT_MODEL", "claude-haiku-4-5")
+        self.api_key = api_key or _get_secret("ANTHROPIC_API_KEY")
+        if not self.api_key:
+            raise ValueError("ANTHROPIC_API_KEY is not set. Please add it to your Streamlit Secrets or .env file.")
+        self.client = Anthropic(api_key=self.api_key)
+        self.model = model or _get_secret("JOBSCOUT_MODEL", "claude-haiku-4-5")
 
     def _thinking_kwargs(self) -> dict:
         if "haiku" in self.model.lower():
@@ -82,11 +100,13 @@ class AnthropicClient(BaseLLMClient):
 class GeminiClient(BaseLLMClient):
     def __init__(self, api_key: str | None = None, model: str | None = None):
         from google import genai
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.api_key = api_key or _get_secret("GEMINI_API_KEY") or _get_secret("GOOGLE_API_KEY")
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY is not set. Please add GEMINI_API_KEY to your Streamlit Secrets (under Advanced Settings) or your .env file.")
         self.client = genai.Client(api_key=self.api_key)
-        self.model = model or os.getenv("JOBSCOUT_MODEL", "gemini-3.6-flash")
+        self.model = model or _get_secret("JOBSCOUT_MODEL", "gemini-2.5-flash")
         # Flash-tier models only for free-tier compatibility
-        self.fallback_models = [self.model, "gemini-3.6-flash", "gemini-2.5-flash"]
+        self.fallback_models = [self.model, "gemini-2.5-flash", "gemini-1.5-flash"]
 
     def _call_with_retry(self, prompt: str, is_json: bool = False, max_retries: int = 4) -> str:
         import time
@@ -143,8 +163,11 @@ class GeminiClient(BaseLLMClient):
 class OpenAIClient(BaseLLMClient):
     def __init__(self, api_key: str | None = None, model: str | None = None):
         from openai import OpenAI
-        self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
-        self.model = model or os.getenv("JOBSCOUT_MODEL", "gpt-4o-mini")
+        self.api_key = api_key or _get_secret("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY is not set. Please add it to your Streamlit Secrets or .env file.")
+        self.client = OpenAI(api_key=self.api_key)
+        self.model = model or _get_secret("JOBSCOUT_MODEL", "gpt-4o-mini")
 
     def generate_text(
         self,
@@ -366,7 +389,7 @@ class OmniRouteClient(BaseLLMClient):
                 continue
 
         # Direct Gemini fallback if key is present
-        if os.getenv("GEMINI_API_KEY"):
+        if _get_secret("GEMINI_API_KEY") or _get_secret("GOOGLE_API_KEY"):
             try:
                 return GeminiClient().generate_structured_json(system_prompt, user_prompt, schema, max_tokens)
             except Exception:
@@ -388,18 +411,20 @@ class OmniRouteClient(BaseLLMClient):
 
 def get_llm_client() -> BaseLLMClient:
     """Factory to get the configured LLM client instance."""
-    provider = os.getenv("LLM_PROVIDER") or os.getenv("JOBSCOUT_PROVIDER", "")
-    provider = provider.lower().strip()
+    provider = _get_secret("LLM_PROVIDER") or _get_secret("JOBSCOUT_PROVIDER", "")
+    provider = provider.lower().strip() if provider else ""
 
     if not provider:
-        if os.getenv("OMNIROUTE_BASE_URL") or os.getenv("OPENAI_BASE_URL"):
-            provider = "omniroute"
-        elif os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+        if _get_secret("GEMINI_API_KEY") or _get_secret("GOOGLE_API_KEY"):
             provider = "gemini"
-        elif os.getenv("OPENAI_API_KEY"):
-            provider = "openai"
-        else:
+        elif _get_secret("ANTHROPIC_API_KEY"):
             provider = "anthropic"
+        elif _get_secret("OPENAI_API_KEY"):
+            provider = "openai"
+        elif _get_secret("OMNIROUTE_BASE_URL"):
+            provider = "omniroute"
+        else:
+            provider = "gemini"
 
     if provider in ("omniroute", "proxy", "local_proxy", "litellm"):
         return OmniRouteClient()

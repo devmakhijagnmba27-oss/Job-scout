@@ -31,6 +31,16 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+# Sync Streamlit Cloud secrets to os.environ so all sub-processes/adapters have access
+try:
+    if hasattr(st, "secrets"):
+        for k in st.secrets:
+            val = st.secrets[k]
+            if isinstance(val, (str, int, float, bool)):
+                os.environ[k] = str(val)
+except Exception:
+    pass
+
 from src.agents import MODEL, drafting_agent, insights_agent, scoring_agent
 from src.archetype import guess_archetype
 from src.contacts import find_contacts
