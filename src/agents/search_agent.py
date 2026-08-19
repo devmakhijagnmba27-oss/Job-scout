@@ -22,8 +22,9 @@ def build_query(profile: dict, page: int = 1) -> dict:
     # Broaden by default so exact-phrase role titles don't starve recall
     # (see src/query_expansion.py); precision is the scorer's job. Opt out
     # with strict_keyword_match: true for verbatim-only matching.
+    skills = prefs.get("must_haves", []) + prefs.get("skills", [])
     keywords = (roles if prefs.get("strict_keyword_match")
-                else expand_keywords(roles, prefs.get("employment_types")))
+                else expand_keywords(roles, prefs.get("employment_types"), skills=skills))
     locs = prefs.get("locations", [])
     clean_locs = []
     indian_cities = ("delhi", "ncr", "gurgaon", "gurugram", "noida", "bangalore", "bengaluru", "mumbai", "pune", "hyderabad", "chennai", "kolkata")

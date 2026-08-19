@@ -11,14 +11,15 @@ from .llm_client import BaseLLMClient
 
 RESUME_EXTRACTION_SYSTEM_PROMPT = """You are an expert executive career advisor and technical recruiter.
 Analyze the candidate's resume thoroughly.
-Extract the candidate's personal details, infer their career trajectory, and recommend the best-matching target job roles, seniority level, and industry categories for their job hunt.
+Extract the candidate's personal details, infer their career trajectory, and recommend the best-matching target job roles, seniority level, core skills, and industry categories for their job hunt.
 
 Guidelines:
-1. target_roles: Suggest 4-6 realistic, high-matching job titles that align with their actual experience level, education (e.g. MBA, engineering, etc.), and skills.
-2. seniority: Determine whether they are entry, junior, mid, senior, or staff. (e.g. MBA students/recent grads should include ['junior', 'internship', 'mid']).
-3. industries: Extract 3-5 relevant industries.
-4. summary: Write a concise 2-3 sentence high-impact professional summary highlighting their core competencies and career goals.
-5. location: If mentioned or inferred from universities/locations in the resume, format it cleanly (e.g. 'New Delhi, India', 'Delhi NCR, India').
+1. target_roles: Suggest 5-8 realistic, high-opportunity job titles and keywords directly aligned with their actual experience level, education (e.g. MBA, Engineering, etc.), domain focus, and skills (e.g. for marketing: 'Digital Marketing Specialist', 'Growth Marketing Associate', 'Influencer Marketing Executive', 'Brand Strategist', 'Social Media Manager', 'Performance Marketing Specialist', etc.).
+2. skills: Extract 6-10 high-value, specific skills and domain proficiencies evident in the resume.
+3. seniority: Determine whether they are entry, junior, mid, senior, or staff (e.g. MBA students/recent grads should include ['junior', 'internship', 'mid']).
+4. industries: Extract 3-5 relevant industries.
+5. summary: Write a concise 2-3 sentence high-impact professional summary highlighting their core competencies and career goals.
+6. location: If mentioned or inferred from universities/locations in the resume, format it cleanly (e.g. 'Greater Noida, India', 'Delhi NCR, India', 'Remote').
 """
 
 RESUME_EXTRACTION_SCHEMA: dict[str, Any] = {

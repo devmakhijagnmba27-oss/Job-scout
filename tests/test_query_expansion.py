@@ -80,3 +80,28 @@ def test_non_internship_profiles_get_no_intern_compounds():
     kw = expand_keywords(["Machine Learning Engineer"],
                          employment_types=["full-time"])
     assert not any("intern" in k for k in kw)
+
+
+def test_marketing_domain_equivalence_classes():
+    kw = expand_keywords(["Digital Marketing Specialist"])
+    assert "digital marketing specialist" in kw
+    assert "digital marketing" in kw
+    assert "growth marketing" in kw
+
+
+def test_brand_and_social_media_equivalence_classes():
+    kw = expand_keywords(["Social Media Manager"])
+    assert "social media manager" in kw
+    assert "social media" in kw
+    assert "smm" in kw
+
+
+def test_skills_and_must_haves_expansion():
+    kw = expand_keywords(
+        ["Marketing Associate"],
+        skills=["Influencer Marketing", "Social Media Strategy"]
+    )
+    assert "marketing associate" in kw
+    assert "influencer marketing" in kw
+    assert "creator marketing" in kw
+    assert "social media strategy" in kw

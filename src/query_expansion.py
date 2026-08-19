@@ -42,18 +42,32 @@ _ROLE_NOUNS = {
 }
 
 # Abbreviation equivalence classes: if ANY member appears as a whole word
-# in the role, all members are added as keywords. Kept intentionally small
-# and high-signal — every abbreviation here is a strong domain term, not a
-# generic word that would pull in unrelated roles.
+# in the role, all members are added as keywords. Kept high-signal domain terms.
 _EQUIV_CLASSES: list[set[str]] = [
+    # AI / ML / Tech
     {"machine learning", "ml"},
     {"artificial intelligence", "ai"},
     {"natural language processing", "nlp"},
     {"large language model", "large language models", "llm"},
     {"reinforcement learning", "rl"},
-    {"computer vision"},
+    {"computer vision", "cv"},
     {"data science", "data scientist"},
+    {"data analytics", "data analyst", "business intelligence", "bi"},
     {"software engineer", "software engineering", "swe"},
+    # Marketing / Growth / Brand / Social Media
+    {"digital marketing", "digital marketer", "growth marketing", "growth marketer"},
+    {"social media", "social media marketing", "social media manager", "smm"},
+    {"product marketing", "product marketing manager", "pmm"},
+    {"performance marketing", "growth marketing", "paid media", "sem", "ppc"},
+    {"brand marketing", "brand strategy", "brand manager", "brand strategist"},
+    {"influencer marketing", "creator marketing", "influencer management"},
+    {"content marketing", "content strategy", "content strategist"},
+    {"search engine optimization", "seo"},
+    # Business / Product / Operations / HR
+    {"product management", "product manager", "pm"},
+    {"business development", "bizdev", "bdr", "sdr"},
+    {"business operations", "bizops"},
+    {"human resources", "hr", "talent acquisition", "recruiting"},
 ]
 
 _WS_RE = re.compile(r"\s+")
@@ -87,8 +101,6 @@ def _intern_compounds(roles: list[str]) -> list[str]:
         if len(core) >= 3 and core[-1] in _ROLE_NOUNS:
             compounds.append(" ".join(core[:-1]) + " intern")
         # Every member of a matched abbreviation class + " intern"
-        # ("ml intern", "ai intern", "data scientist intern" are all
-        # real posting titles).
         for cls in _EQUIV_CLASSES:
             if any(_word_in(m, r) for m in cls):
                 compounds.extend(f"{member} intern" for member in cls)
@@ -96,16 +108,15 @@ def _intern_compounds(roles: list[str]) -> list[str]:
 
 
 def expand_keywords(roles: list[str],
-                    employment_types: list[str] | None = None) -> list[str]:
-    """Broaden target roles into a recall-oriented keyword list.
+                    employment_types: list[str] | None = None,
+                    skills: list[str] | None = None) -> list[str]:
+    """Broaden target roles and resume skills into a recall-oriented keyword list.
 
     The primary role stays keywords[0] — query-based adapters search one
     keyword per round (rotation), and round 1 must be the user's own
     primary role. For internship-seeking profiles, intern-targeted
-    compounds come right after it so rotation reaches them by round 2
-    (LinkedIn hard-caps at 2 rounds). Everything is deterministic
-    (deduped, order-stable) so a given profile always produces the same
-    query."""
+    compounds come right after it so rotation reaches them by round 2.
+    Skills and related domain terms expand afterwards deterministically."""
     ordered: list[str] = []
     seen: set[str] = set()
 
@@ -141,10 +152,21 @@ def expand_keywords(roles: list[str],
         # Drop a trailing role noun to get the pure domain (>= 2 words left).
         if len(core) >= 3 and core[-1] in _ROLE_NOUNS:
             add(" ".join(core[:-1]))
-        # Abbreviation equivalences.
+        # Abbreviation and domain equivalences.
         for cls in _EQUIV_CLASSES:
             if any(_word_in(m, r) for m in cls):
                 for member in cls:
                     add(member)
+
+    # Incorporate candidate skills & must-haves derived from resume
+    if skills:
+        for sk in skills:
+            s_clean = _WS_RE.sub(" ", (sk or "")).strip().lower()
+            if len(s_clean) >= 3:
+                add(s_clean)
+                for cls in _EQUIV_CLASSES:
+                    if any(_word_in(m, s_clean) for m in cls):
+                        for member in cls:
+                            add(member)
 
     return ordered
