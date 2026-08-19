@@ -59,32 +59,40 @@ DRAFT_SCHEMA = {
 }
 
 
-def draft_package(client: Anthropic, skills_profile: str, job: dict,
+def draft_package(client: Any, skills_profile: str, job: dict,
                   scoring: dict, communication_style: str = "",
                   voice_profile: str = "") -> dict:
     audit("llm.draft_package", {"job_id": job["id"], "title": job["title"]})
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=2000,
-        system=load_skill("cover-letter-drafting"),
-        output_config={"format": {"type": "json_schema", "schema": DRAFT_SCHEMA}},
-        messages=[{
-            "role": "user",
-            "content": (
-                f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n"
-                f"{_style_line(communication_style, voice_profile)}\n"
-                f"WHY THIS JOB SCORED {scoring['score']}/100:\n{scoring['summary']}\n\n"
-                "<job_posting>\n"
-                f"Title: {job['title']}\nCompany: {job['company']}\n"
-                f"Location: {job['location']} ({job['remote']})\n"
-                f"Description: {job['description']}\n"
-                "</job_posting>"
-            ),
-        }],
-        **thinking_kwargs(),
+    prompt = (
+        f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n"
+        f"{_style_line(communication_style, voice_profile)}\n"
+        f"WHY THIS JOB SCORED {scoring['score']}/100:\n{scoring['summary']}\n\n"
+        "<job_posting>\n"
+        f"Title: {job['title']}\nCompany: {job['company']}\n"
+        f"Location: {job['location']} ({job['remote']})\n"
+        f"Description: {job['description']}\n"
+        "</job_posting>"
     )
-    text = next(b.text for b in response.content if b.type == "text")
-    result = json.loads(text)
+
+    if hasattr(client, "generate_structured_json"):
+        result = client.generate_structured_json(
+            system_prompt=load_skill("cover-letter-drafting"),
+            user_prompt=prompt,
+            schema=DRAFT_SCHEMA,
+            max_tokens=2000,
+        )
+    else:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=2000,
+            system=load_skill("cover-letter-drafting"),
+            output_config={"format": {"type": "json_schema", "schema": DRAFT_SCHEMA}},
+            messages=[{"role": "user", "content": prompt}],
+            **thinking_kwargs(),
+        )
+        text = next(b.text for b in response.content if b.type == "text")
+        result = json.loads(text)
+
     return {
         "cover_letter": result["cover_letter"],
         "resume_tweaks": "\n".join(f"• {t}" for t in result["resume_tweaks"]),
@@ -118,37 +126,38 @@ REVIEW_SCHEMA = {
 }
 
 
-def review_draft(client: Anthropic, skills_profile: str, job: dict,
+def review_draft(client: Any, skills_profile: str, job: dict,
                  cover_letter: str, communication_style: str = "",
                  voice_profile: str = "") -> dict:
-    """Fresh-context critique of an already-drafted cover letter. Call
-    this AFTER draft_package() and BEFORE unmasking — it operates on the
-    same masked text draft_package produced and must never see real PII.
-    Returns issues_found (categorized critique), revised_cover_letter
-    (the fixed version — use this, not the original draft), and
-    revision_summary (one sentence, safe to show a human)."""
     audit("llm.review_draft", {"job_id": job["id"], "title": job["title"]})
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=2000,
-        system=load_skill("cover-letter-review"),
-        output_config={"format": {"type": "json_schema", "schema": REVIEW_SCHEMA}},
-        messages=[{
-            "role": "user",
-            "content": (
-                f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n"
-                f"{_style_line(communication_style, voice_profile)}\n"
-                "<job_posting>\n"
-                f"Title: {job['title']}\nCompany: {job['company']}\n"
-                f"Description: {job['description']}\n"
-                "</job_posting>\n\n"
-                f"DRAFTED COVER LETTER TO REVIEW:\n{cover_letter}"
-            ),
-        }],
-        **thinking_kwargs(),
+    prompt = (
+        f"CANDIDATE SKILLS PROFILE (PII-masked):\n{skills_profile}\n"
+        f"{_style_line(communication_style, voice_profile)}\n"
+        "<job_posting>\n"
+        f"Title: {job['title']}\nCompany: {job['company']}\n"
+        f"Description: {job['description']}\n"
+        "</job_posting>\n\n"
+        f"DRAFTED COVER LETTER TO REVIEW:\n{cover_letter}"
     )
-    text = next(b.text for b in response.content if b.type == "text")
-    return json.loads(text)
+
+    if hasattr(client, "generate_structured_json"):
+        return client.generate_structured_json(
+            system_prompt=load_skill("cover-letter-review"),
+            user_prompt=prompt,
+            schema=REVIEW_SCHEMA,
+            max_tokens=2000,
+        )
+    else:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=2000,
+            system=load_skill("cover-letter-review"),
+            output_config={"format": {"type": "json_schema", "schema": REVIEW_SCHEMA}},
+            messages=[{"role": "user", "content": prompt}],
+            **thinking_kwargs(),
+        )
+        text = next(b.text for b in response.content if b.type == "text")
+        return json.loads(text)
 
 
 CV_SCHEMA = {
@@ -190,42 +199,37 @@ CV_SCHEMA = {
 }
 
 
-def tailor_cv(client: Anthropic, masked_resume: str, skills_profile: str,
+def tailor_cv(client: Any, masked_resume: str, skills_profile: str,
              job: dict, voice_profile: str = "") -> dict:
-    """Restructure the candidate's REAL resume into ATS-friendly sections
-    tailored to one job — selection, reordering, and rephrasing only,
-    never new facts. Works from the full masked resume text (not just the
-    condensed skills_profile) so the LLM has real dates/companies/bullets
-    to draw from instead of inventing plausible-looking specifics.
-
-    voice_profile (optional) applies mainly to the free-prose summary
-    section — bullets and dates are terse structured facts with little
-    room for "voice" — but is passed through regardless of section.
-
-    Returns masked CV sections — src/cv_render.py unmasks locally, once,
-    only at final PDF render."""
     audit("llm.tailor_cv", {"job_id": job["id"], "title": job["title"]})
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=2500,
-        system=load_skill("cv-tailoring"),
-        output_config={"format": {"type": "json_schema", "schema": CV_SCHEMA}},
-        messages=[{
-            "role": "user",
-            "content": (
-                f"CANDIDATE SKILLS PROFILE (PII-masked, condensed):\n"
-                f"{skills_profile}\n"
-                f"{_style_line('', voice_profile)}\n"
-                f"FULL MASKED RESUME (source of truth for real facts):\n"
-                f"{masked_resume or '(no resume provided)'}\n\n"
-                "<job_posting>\n"
-                f"Title: {job['title']}\nCompany: {job['company']}\n"
-                f"Location: {job['location']} ({job['remote']})\n"
-                f"Description: {job['description']}\n"
-                "</job_posting>"
-            ),
-        }],
-        **thinking_kwargs(),
+    prompt = (
+        f"CANDIDATE SKILLS PROFILE (PII-masked, condensed):\n"
+        f"{skills_profile}\n"
+        f"{_style_line('', voice_profile)}\n"
+        f"FULL MASKED RESUME (source of truth for real facts):\n"
+        f"{masked_resume or '(no resume provided)'}\n\n"
+        "<job_posting>\n"
+        f"Title: {job['title']}\nCompany: {job['company']}\n"
+        f"Location: {job['location']} ({job['remote']})\n"
+        f"Description: {job['description']}\n"
+        "</job_posting>"
     )
-    text = next(b.text for b in response.content if b.type == "text")
-    return json.loads(text)
+
+    if hasattr(client, "generate_structured_json"):
+        return client.generate_structured_json(
+            system_prompt=load_skill("cv-tailoring"),
+            user_prompt=prompt,
+            schema=CV_SCHEMA,
+            max_tokens=2500,
+        )
+    else:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=2500,
+            system=load_skill("cv-tailoring"),
+            output_config={"format": {"type": "json_schema", "schema": CV_SCHEMA}},
+            messages=[{"role": "user", "content": prompt}],
+            **thinking_kwargs(),
+        )
+        text = next(b.text for b in response.content if b.type == "text")
+        return json.loads(text)

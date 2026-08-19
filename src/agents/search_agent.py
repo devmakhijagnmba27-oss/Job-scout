@@ -24,9 +24,21 @@ def build_query(profile: dict, page: int = 1) -> dict:
     # with strict_keyword_match: true for verbatim-only matching.
     keywords = (roles if prefs.get("strict_keyword_match")
                 else expand_keywords(roles, prefs.get("employment_types")))
+    locs = prefs.get("locations", [])
+    clean_locs = []
+    indian_cities = ("delhi", "ncr", "gurgaon", "gurugram", "noida", "bangalore", "bengaluru", "mumbai", "pune", "hyderabad", "chennai", "kolkata")
+    for l in locs:
+        if not l or not str(l).strip():
+            continue
+        cleaned = str(l).strip()
+        if any(k in cleaned.lower() for k in indian_cities) and "india" not in cleaned.lower():
+            cleaned = f"{cleaned}, India"
+        if cleaned not in clean_locs:
+            clean_locs.append(cleaned)
+
     return {
         "keywords": keywords,
-        "locations": prefs.get("locations", []),
+        "locations": clean_locs,
         "remote_only": prefs.get("remote_preference") == "remote_only",
         "limit_per_source": 25,
         "page": page,

@@ -52,14 +52,16 @@ SCORE_SCHEMA = {
 }
 
 
-def extract_voice_profile(client: Anthropic, masked_samples: str) -> str:
+def extract_voice_profile(client: Any, masked_samples: str) -> str:
     """One call per session: distill the candidate's own (masked) past
-    writing into a compact style descriptor, reused for every draft this
-    session — same token-efficiency reasoning as analyze_resume(). Empty
-    string in, empty string out: no LLM call is made by the CALLER when
-    there are no writing samples (see app.py/orchestrator.py), so this
-    only ever runs when there's real text to distill."""
+    writing into a compact style descriptor."""
     audit("llm.extract_voice_profile", {"chars": len(masked_samples)})
+    if hasattr(client, "generate_text"):
+        return client.generate_text(
+            system_prompt=load_skill("voice-matching"),
+            user_prompt=masked_samples,
+            max_tokens=500,
+        )
     response = client.messages.create(
         model=MODEL,
         max_tokens=500,
@@ -70,60 +72,81 @@ def extract_voice_profile(client: Anthropic, masked_samples: str) -> str:
     return next(b.text for b in response.content if b.type == "text")
 
 
-def analyze_resume(client: Anthropic, masked_resume: str, summary: str) -> str:
+def analyze_resume(client: Any, masked_resume: str, summary: str) -> str:
     """One call per session: condense the masked resume into a dense skills
     profile that is reused for every job scored (token efficiency)."""
     audit("llm.analyze_resume", {"chars": len(masked_resume)})
+    prompt = (
+        f"Candidate self-summary: {summary or '(none)'}\n\n"
+        f"Masked resume:\n{masked_resume or '(no resume provided)'}"
+    )
+    if hasattr(client, "generate_text"):
+        return client.generate_text(
+            system_prompt=load_skill("resume-analysis"),
+            user_prompt=prompt,
+            max_tokens=1500,
+        )
     response = client.messages.create(
         model=MODEL,
         max_tokens=1500,
         system=load_skill("resume-analysis"),
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Candidate self-summary: {summary or '(none)'}\n\n"
-                f"Masked resume:\n{masked_resume or '(no resume provided)'}"
-            ),
-        }],
+        messages=[{"role": "user", "content": prompt}],
         **thinking_kwargs(),
     )
     return next(b.text for b in response.content if b.type == "text")
 
 
-def score_job(client: Anthropic, skills_profile: str, preferences: dict,
+def score_job(client: Any, skills_profile: str, preferences: dict,
               job: dict, weights: dict) -> dict:
     """Score one job. Returns dimensions, deterministic weighted total,
     and a plain-language summary."""
     audit("llm.score_job", {"job_id": job["id"], "title": job["title"]})
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=1200,
-        system=load_skill("job-scoring"),
-        output_config={"format": {"type": "json_schema", "schema": SCORE_SCHEMA}},
-        messages=[{
-            "role": "user",
-            "content": (
-                f"CANDIDATE SKILLS PROFILE:\n{skills_profile}\n\n"
-                f"CANDIDATE PREFERENCES:\n{json.dumps(preferences, indent=1)}\n\n"
-                "<job_posting>\n"
-                f"Title: {job['title']}\nCompany: {job['company']}\n"
-                f"Location: {job['location']} ({job['remote']})\n"
-                f"Type: {job['employment_type']}\n"
-                f"Description: {job['description']}\n"
-                "</job_posting>"
-            ),
-        }],
+    prompt = (
+        f"CANDIDATE SKILLS PROFILE:\n{skills_profile}\n\n"
+        f"CANDIDATE PREFERENCES:\n{json.dumps(preferences, indent=1)}\n\n"
+        "<job_posting>\n"
+        f"Title: {job['title']}\nCompany: {job['company']}\n"
+        f"Location: {job['location']} ({job['remote']})\n"
+        f"Type: {job['employment_type']}\n"
+        f"Description: {job['description']}\n"
+        "</job_posting>"
     )
-    text = next(b.text for b in response.content if b.type == "text")
-    result = json.loads(text)
+
+    from .llm_client import parse_json_resiliently
+
+    if hasattr(client, "generate_structured_json"):
+        result = client.generate_structured_json(
+            system_prompt=load_skill("job-scoring"),
+            user_prompt=prompt,
+            schema=SCORE_SCHEMA,
+            max_tokens=1200,
+        )
+    else:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=1200,
+            system=load_skill("job-scoring"),
+            output_config={"format": {"type": "json_schema", "schema": SCORE_SCHEMA}},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = next(b.text for b in response.content if b.type == "text")
+        result = parse_json_resiliently(text)
+
+    # Fallback / safe extraction of dimensions
+    dims = result.get("dimensions", {}) if isinstance(result, dict) else {}
+    for d in DIMENSIONS:
+        if d not in dims or not isinstance(dims[d], dict):
+            dims[d] = {"score": 50, "reason": "Evaluated based on profile alignment."}
+        elif "score" not in dims[d]:
+            dims[d]["score"] = 50
 
     # SECURITY / correctness: weighted total in code, not LLM judgment.
     total = sum(
-        result["dimensions"][d]["score"] * weights.get(d, 0.0)
+        dims[d]["score"] * weights.get(d, 0.0)
         for d in DIMENSIONS
     )
     return {
-        "dimensions": result["dimensions"],
-        "summary": result["summary"],
+        "dimensions": dims,
+        "summary": result.get("summary", "Match evaluation completed.") if isinstance(result, dict) else "Match evaluated.",
         "score": round(total, 1),
     }

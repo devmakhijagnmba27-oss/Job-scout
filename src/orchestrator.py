@@ -48,7 +48,18 @@ from . import notion_sync
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CV_OUTPUT_DIR = REPO_ROOT / "output" / "cvs"
-console = Console()
+
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+console = Console(legacy_windows=False)
+
 
 
 def _today() -> str:
@@ -464,7 +475,7 @@ def _print_table(jobs: list[dict]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="JobScout — AI job matching agent")
+    parser = argparse.ArgumentParser(description="JobScout — Autonomous AI job matching & outreach agent")
     parser.add_argument("--max-score", type=int, default=6,
                         help="max jobs to score with the LLM per run (cost "
                              "cap; also the hard ceiling for --min-matches)")
@@ -483,9 +494,19 @@ def main() -> None:
     parser.add_argument("--find-contacts", action="store_true",
                         help="look up recruiter/HR contacts at each "
                              "matched job's company via Hunter.io "
-                             "(requires HUNTER_API_KEY). Display-only — "
-                             "JobScout never contacts anyone itself.")
+                             "(requires HUNTER_API_KEY).")
+    parser.add_argument("--process-followups", action="store_true",
+                        help="process all due follow-up emails in the outreach pipeline")
     args = parser.parse_args()
+
+    if args.process_followups:
+        from .outreach import OutreachSequencer
+        sequencer = OutreachSequencer()
+        res = sequencer.process_due_followups()
+        console.print(f"\n[green]📬 Processed {res.processed_count} follow-ups: "
+                      f"{res.sent_count} sent, {res.failed_count} failed.[/green]\n")
+        return
+
     asyncio.run(run(args.max_score, args.dry_run, args.min_matches, args.auto,
                     args.find_contacts))
 

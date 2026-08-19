@@ -12,12 +12,24 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
+
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 import pandas as pd
 import streamlit as st
 import yaml
 from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 from src.agents import MODEL, drafting_agent, insights_agent, scoring_agent
 from src.archetype import guess_archetype
@@ -38,6 +50,13 @@ from src.orchestrator import (_explain_empty_filter, _relevance_rank,
 from src.pipeline import (MAX_SEARCH_ROUNDS, collect_new_jobs, fetch_jobs,
                           verify_liveness)
 from src.records import Records
+from src.outreach import (
+    OutreachTracker,
+    OutreachRecord,
+    EmailDispatcher,
+    OutreachSequencer,
+    generate_outreach_package,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 CV_OUTPUT_DIR = REPO_ROOT / "output" / "cvs"
@@ -55,6 +74,9 @@ WEIGHT_DIMS = ["skills_match", "role_title_match", "industry_match",
 
 records = Records()
 memory = Memory()
+outreach_tracker = OutreachTracker()
+email_dispatcher = EmailDispatcher()
+outreach_sequencer = OutreachSequencer(tracker=outreach_tracker, dispatcher=email_dispatcher)
 
 
 def _csv(text: str) -> list[str]:
@@ -116,39 +138,162 @@ def _cv_download_button(job: dict, record: dict, key: str) -> None:
                        file_name=file_name, mime="application/pdf", key=key)
 
 
-def _contacts_section(job: dict, record: dict, key: str) -> None:
-    """Recruiter/HR contact lookup via Hunter.io — third-party PII, so
-    opt-in (HUNTER_API_KEY) and display-only: JobScout never messages
-    anyone. contacts=[] (searched, found nothing) is shown distinctly
-    from never having searched at all."""
-    if not hunter_available():
+def _contacts_section(job: dict, record: dict, package: dict | None = None,
+                      masker: PIIMasker | None = None, skills_profile: str = "",
+                      profile: dict | None = None, communication_style: str = "",
+                      voice_profile: str = "", key: str = "contacts") -> None:
+    """Recruiter/HR contact lookup & Autonomous Outreach Campaign center."""
+    st.markdown("### 📬 Recruiter Discovery & Cold Outreach")
+
+    contacts = record.get("contacts", [])
+    
+    # 1. Contact Discovery Button / Status
+    if not contacts and hunter_available():
+        if st.button("🔍 Find Recruiter Contacts at " + job.get("company", "Company"), key=f"find_{key}",
+                     help="Searches Hunter.io for hiring managers, talent acquisition, and technical recruiters."):
+            with st.spinner("Searching Hunter.io for contacts…"):
+                found = find_contacts(job.get("company", ""), job.get("title", ""))
+            records.upsert(job, contacts=found)
+            st.rerun()
+
+    # Manual Contact Fallback
+    with st.expander("➕ Add / Manage Recruiter Contact manually", expanded=not contacts):
+        c1, c2, c3 = st.columns(3)
+        man_name = c1.text_input("Contact Name", key=f"man_name_{key}")
+        man_email = c2.text_input("Contact Email", key=f"man_email_{key}")
+        man_role = c3.text_input("Position / Title", key=f"man_role_{key}", placeholder="e.g. Engineering Manager")
+        if st.button("Save Contact", key=f"save_man_{key}"):
+            if man_email:
+                new_c = {
+                    "name": man_name or "Hiring Team",
+                    "position": man_role or "Recruiter / Team Lead",
+                    "email": man_email.strip(),
+                    "confidence": 100,
+                    "sources": ["manual_entry"],
+                }
+                contacts.append(new_c)
+                records.upsert(job, contacts=contacts)
+                st.success(f"Added {man_email} to contacts.")
+                st.rerun()
+            else:
+                st.error("Contact email is required.")
+
+    if not contacts:
+        st.caption("No recruiter contacts linked yet. Search above or enter one manually to draft personalized cold outreach.")
         return
-    if "contacts" in record:
-        contacts = record["contacts"]
-        if not contacts:
-            st.caption("📇 No contacts found for this company via Hunter.io.")
-            return
-        st.markdown("**📇 Contacts found** (via Hunter.io — verify before reaching out)")
-        for c in contacts:
-            label = c.get("name") or "(name unknown)"
-            role = f" — {c['position']}" if c.get("position") else ""
-            conf = f" · confidence {c['confidence']}%" if c.get("confidence") else ""
-            st.caption(f"{label}{role} · {c['email']}{conf}")
-            links = []
-            if c.get("linkedin"):
-                links.append(f"[LinkedIn]({c['linkedin']})")
-            links += [f"[source]({s})" for s in c.get("sources", [])]
-            if links:
-                st.caption(" · ".join(links))
-        return
-    if st.button("🔍 Find contacts", key=key,
-                 help="Looks up recruiter/HR contacts at this company via "
-                      "Hunter.io. Shown for you to reach out to yourself — "
-                      "JobScout never contacts anyone on its own."):
-        with st.spinner("Searching Hunter.io for recruiter/HR contacts…"):
-            found = find_contacts(job.get("company", ""), job.get("title", ""))
-        records.upsert(job, contacts=found)
-        st.rerun()
+
+    st.markdown("**Discovered Contacts:**")
+    for i, c in enumerate(contacts):
+        c_label = c.get("name") or "(name unknown)"
+        c_role = f" — {c.get('position')}" if c.get("position") else ""
+        c_conf = f" · confidence {c.get('confidence')}%" if c.get('confidence') else ""
+        c_email = c.get("email", "")
+        
+        st.markdown(f"👤 **{c_label}**{c_role} · `{c_email}`{c_conf}")
+        
+        # Check if an outreach record already exists in OutreachTracker
+        outreach_id = f"{job['id']}_{c_email}"
+        existing_outreach = outreach_tracker.get_record(outreach_id)
+        
+        col_gen, col_status = st.columns([2, 3])
+        
+        with col_gen:
+            gen_label = "🔄 Re-generate Outreach Sequence" if existing_outreach else "⚡ Draft Cold Outreach Sequence"
+            if st.button(gen_label, key=f"gen_out_{outreach_id}", type="secondary" if existing_outreach else "primary"):
+                if not package or not masker:
+                    st.error("Package context required. Run search & score first.")
+                else:
+                    with st.spinner(f"Generating hyper-personalized 3-step outreach for {c_label}…"):
+                        # PII masked generation
+                        res = generate_outreach_package(
+                            skills_profile=skills_profile,
+                            job=job,
+                            scoring=package,
+                            contact=c,
+                            communication_style=communication_style,
+                            voice_profile=voice_profile,
+                        )
+                        # Reinject candidate PII locally
+                        cand_info = (profile or {}).get("candidate", {})
+                        cand_name = cand_info.get("name", "Candidate")
+                        cand_email = cand_info.get("email", "")
+                        
+                        unmasked_touches = []
+                        for t in res["touches"]:
+                            unmasked_touches.append({
+                                "touch_number": t["touch_number"],
+                                "subject": masker.unmask(t["subject"]),
+                                "body": masker.unmask(t["body"]),
+                                "scheduled_date": t["scheduled_date"],
+                                "status": t["status"],
+                            })
+                        
+                        outreach_rec = OutreachRecord(
+                            id=outreach_id,
+                            job_id=job["id"],
+                            job_title=job["title"],
+                            company=job["company"],
+                            contact_name=c.get("name"),
+                            contact_email=c_email,
+                            contact_position=c.get("position"),
+                            linkedin_note=masker.unmask(res.get("linkedin_note", "")),
+                            touches=unmasked_touches,
+                            overall_status="drafted",
+                        )
+                        outreach_tracker.save_record(outreach_rec)
+                        st.success("✅ Outreach sequence generated and saved to Outreach CRM!")
+                        st.rerun()
+
+        # Display drafted campaign if exists
+        if existing_outreach:
+            with st.expander(f"✉️ Outreach Campaign for {c_label} ({existing_outreach.overall_status.upper()})", expanded=True):
+                st.caption(f"Status: `{existing_outreach.overall_status}` · Recipient: `{c_email}`")
+                
+                # LinkedIn Note
+                if existing_outreach.linkedin_note:
+                    st.markdown("**🔗 LinkedIn Connection Note (<300 chars):**")
+                    st.code(existing_outreach.linkedin_note, language="text")
+                
+                # Touchpoints Tabs
+                t_labels = [f"Touch {t['touch_number']} ({t['status']})" for t in existing_outreach.touches]
+                if t_labels:
+                    t_tabs = st.tabs(t_labels)
+                    for t_idx, (t_tab, touch) in enumerate(zip(t_tabs, existing_outreach.touches)):
+                        with t_tab:
+                            st.caption(f"Scheduled: `{touch.get('scheduled_date')}` · Status: `{touch.get('status')}`")
+                            touch["subject"] = st.text_input(
+                                "Subject", touch.get("subject", ""),
+                                key=f"subj_{outreach_id}_{t_idx}"
+                            )
+                            touch["body"] = st.text_area(
+                                "Email Body", touch.get("body", ""),
+                                height=200, key=f"body_{outreach_id}_{t_idx}"
+                            )
+                            
+                            c_send, c_save = st.columns([2, 1])
+                            if c_save.button("💾 Save Edits", key=f"save_touch_{outreach_id}_{t_idx}"):
+                                outreach_tracker.save_record(existing_outreach)
+                                st.success("Saved edits.")
+                                st.rerun()
+
+                            send_disabled = touch.get("status") == "sent"
+                            send_btn_label = "✅ Sent" if send_disabled else f"🚀 Send Touch {touch['touch_number']} Now"
+                            
+                            if c_send.button(send_btn_label, key=f"send_touch_{outreach_id}_{t_idx}", disabled=send_disabled, type="primary"):
+                                cand_info = (profile or {}).get("candidate", {})
+                                dispatch_res = email_dispatcher.send_email(
+                                    to_email=c_email,
+                                    subject=touch["subject"],
+                                    body_text=touch["body"],
+                                    candidate_name=cand_info.get("name"),
+                                )
+                                if dispatch_res.success:
+                                    outreach_tracker.mark_touch_sent(outreach_id, t_idx)
+                                    mode_text = "Simulated (Safe Dry Run Mode - set OUTREACH_DRY_RUN=false with SMTP to send live)" if dispatch_res.is_dry_run else "Live via SMTP"
+                                    st.success(f"🎉 Touch {touch['touch_number']} sent! ({mode_text})")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Failed to send: {dispatch_res.error}")
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +326,7 @@ with st.sidebar:
     st.title("🔭 JobScout")
     st.caption("Personal job-search concierge agent. Searches, scores, and "
                "drafts — **you** decide and apply.")
-    page = st.radio("Navigate", ["👤 Profile", "🚀 Run JobScout", "📚 History"],
+    page = st.radio("Navigate", ["👤 Profile", "🚀 Run JobScout", "📬 Outreach CRM", "📚 History"],
                     label_visibility="collapsed", key="nav")
     st.divider()
     # Reviewed spans every decision, so it opens History as-is rather than
@@ -190,6 +335,8 @@ with st.sidebar:
                       None, "Show all reviewed jobs")
     _clickable_metric("Approved", memory.approved_count, "approved",
                       "approved", "Show approved jobs")
+    st.metric("Outreach Campaigns", len(outreach_tracker.list_records()))
+    st.metric("Follow-ups Due", len(outreach_tracker.list_due_followups()))
     st.html("""
         <style>
         [class*="st-key-stat_"] { position: relative; }
@@ -227,6 +374,62 @@ def page_profile() -> None:
     weights = existing.get("weights", {})
     sources = existing.get("sources", {})
 
+    current_resume = REPO_ROOT / "profile" / "resume.pdf"
+    
+    with st.expander("✨ Auto-Extract Profile & Target Roles from Resume", expanded=True):
+        st.write("Upload or use your existing resume (`resume.pdf`) to let the AI automatically infer your **contact details, background summary, recommended target roles, seniority, and skills**.")
+        uploaded_res = st.file_uploader("Upload Resume to Auto-Extract (PDF)", type=["pdf"], key="auto_res_upload")
+        if st.button("🚀 Auto-Extract & Fill Profile Now", type="primary", use_container_width=True):
+            with st.spinner("🤖 Analyzing resume and discovering optimal target roles…"):
+                try:
+                    from pypdf import PdfReader
+                    from src.agents.llm_client import get_llm_client
+                    from src.agents.resume_extractor import extract_profile_from_resume
+                    
+                    target_pdf = current_resume
+                    if uploaded_res is not None:
+                        current_resume.parent.mkdir(parents=True, exist_ok=True)
+                        current_resume.write_bytes(uploaded_res.read())
+                        target_pdf = current_resume
+                        
+                    if not target_pdf.exists():
+                        st.error("No resume file found. Please upload a PDF resume first.")
+                    else:
+                        reader = PdfReader(str(target_pdf))
+                        raw_text = "\n".join(p.extract_text() or "" for p in reader.pages)
+                        extracted = extract_profile_from_resume(get_llm_client(), raw_text)
+                        
+                        if extracted:
+                            # Apply to profile.yaml directly and refresh
+                            cand["name"] = extracted.get("name") or cand.get("name", "")
+                            cand["email"] = extracted.get("email") or cand.get("email", "")
+                            cand["phone"] = extracted.get("phone") or cand.get("phone", "")
+                            cand["summary"] = extracted.get("summary") or cand.get("summary", "")
+                            
+                            if extracted.get("target_roles"):
+                                prefs["target_roles"] = extracted["target_roles"]
+                            if extracted.get("seniority"):
+                                prefs["seniority"] = extracted["seniority"]
+                            if extracted.get("industries"):
+                                prefs["industries"] = extracted["industries"]
+                            if extracted.get("location"):
+                                prefs["locations"] = [extracted["location"], "Delhi NCR, India", "Remote"]
+                            if extracted.get("skills"):
+                                prefs["must_haves"] = extracted["skills"][:3]
+                                
+                            existing["candidate"] = cand
+                            existing["preferences"] = prefs
+                            if "sources" not in existing:
+                                existing["sources"] = sources
+                            if "weights" not in existing:
+                                existing["weights"] = weights
+                            
+                            PROFILE_PATH.write_text(yaml.dump(existing, sort_keys=False))
+                            st.success(f"✅ Extracted! Recommended roles: **{', '.join(prefs.get('target_roles', []))}**")
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"Extraction error: {e}")
+
     with st.form("profile_form"):
         st.subheader("About you")
         c1, c2, c3 = st.columns(3)
@@ -245,11 +448,9 @@ def page_profile() -> None:
                  "if you upload writing samples below — a real learned "
                  "style beats a coarse preset.")
 
-        resume_file = st.file_uploader("Resume (PDF)", type=["pdf"])
-        current_resume = REPO_ROOT / "profile" / "resume.pdf"
+        resume_file = st.file_uploader("Replace Resume (PDF)", type=["pdf"])
         if current_resume.exists():
-            st.caption(f"✅ Current resume on file: `{current_resume.name}` "
-                       "(upload to replace)")
+            st.caption(f"✅ Current resume on file: `{current_resume.name}`")
 
         extra_docs = st.file_uploader(
             "Additional documents (optional) — LinkedIn export, past cover "
@@ -575,7 +776,10 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
         st.markdown(f"*{package['summary']}*")
         st.divider()
 
-        _contacts_section(job, record, key=f"contacts_{job['id']}")
+        _contacts_section(job, record, package=package, masker=masker,
+                          skills_profile=skills_profile, profile=profile,
+                          communication_style=communication_style,
+                          voice_profile=voice_profile, key=f"contacts_{job['id']}")
 
         # Draft package (auto-suggested above threshold; on-demand below)
         if record.get("cover_letter"):
@@ -627,9 +831,9 @@ def page_run() -> None:
     if profile is None:
         st.warning("No profile yet — create one on the **👤 Profile** page first.")
         return
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        st.error("`ANTHROPIC_API_KEY` is not set. Add it to `.env` "
-                 "(see `.env.example`), then restart the app.")
+    ai_keys = ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "OMNIROUTE_BASE_URL", "OPENAI_BASE_URL")
+    if not any(os.getenv(k) for k in ai_keys) and os.getenv("LLM_PROVIDER") != "omniroute":
+        st.error("No AI key or local proxy found in `.env`. Add `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OMNIROUTE_BASE_URL` to `.env`.")
         return
 
     prefs = profile.get("preferences", {})
@@ -653,13 +857,16 @@ def page_run() -> None:
     run = c3.button("🔎 Search & score", type="primary", width="stretch")
 
     if run:
+        load_dotenv(override=True)
         cand = profile.get("candidate", {})
         masker = PIIMasker(name=cand.get("name", ""),
                            email=cand.get("email", ""),
                            phone=cand.get("phone", ""),
                            address=cand.get("address", ""))
-        from anthropic import Anthropic
-        st.session_state["client"] = Anthropic()
+        from src.agents.llm_client import get_llm_client
+        st.session_state["client"] = get_llm_client()
+        st.session_state.pop("skills_profile", None)
+        st.session_state.pop("voice_profile", None)
 
         with st.status("Running the agent pipeline…", expanded=True) as status:
             target = int(max_score)
@@ -751,6 +958,9 @@ def page_run() -> None:
             scored = []
             hits = 0
             for i, job in enumerate(to_score):
+                import time
+                if i > 0:
+                    time.sleep(0.4)
                 try:
                     result = scoring_agent.score_job(
                         st.session_state["client"],
@@ -1086,10 +1296,112 @@ def page_history() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Page 3 — Outreach CRM
+# ---------------------------------------------------------------------------
+
+def page_outreach_crm() -> None:
+    st.header("📬 Outreach CRM & Follow-up Sequencer")
+    st.caption("Manage personalized outreach campaigns, track responses, and automate multi-touch follow-ups.")
+
+    all_campaigns = outreach_tracker.list_records()
+    due_items = outreach_tracker.list_due_followups()
+    active_count = len([c for c in all_campaigns if c.overall_status == "active"])
+    replied_count = len([c for c in all_campaigns if c.overall_status in ("replied", "interview")])
+
+    # Metric Banner
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Campaigns", len(all_campaigns))
+    m2.metric("Active Sequences", active_count)
+    m3.metric("Follow-ups Due Today", len(due_items))
+    m4.metric("Replied / Interviews", replied_count)
+
+    st.divider()
+
+    # Dispatcher Mode Banner
+    is_dry = email_dispatcher.dry_run
+    mode_badge = "🟡 Safe Dry Run Mode (Simulating dispatches to logs/outreach_sent.jsonl)" if is_dry else "🟢 Live SMTP Dispatch Mode"
+    st.info(f"**Email Engine Status:** {mode_badge}\n\n*Configure SMTP_USER, SMTP_PASSWORD, and OUTREACH_DRY_RUN=false in `.env` for live sending.*")
+
+    # Follow-up Automation Action
+    c_proc, c_filt = st.columns([1, 2])
+    with c_proc:
+        if st.button("⚡ Process All Due Follow-ups Now", type="primary", disabled=len(due_items) == 0):
+            with st.spinner("Dispatching due follow-ups…"):
+                res = outreach_sequencer.process_due_followups()
+            st.success(f"Processed {res.processed_count} follow-ups: {res.sent_count} sent successfully, {res.failed_count} failed.")
+            st.rerun()
+
+    status_options = ["all", "drafted", "active", "completed_sequence", "replied", "interview", "declined", "archived"]
+    selected_status = c_filt.selectbox("Filter by Status", status_options, index=0)
+
+    displayed_campaigns = all_campaigns if selected_status == "all" else [c for c in all_campaigns if c.overall_status == selected_status]
+
+    if not displayed_campaigns:
+        st.caption("No outreach campaigns found matching the filter. Run JobScout and click 'Draft Cold Outreach Sequence' on any job card.")
+        return
+
+    for camp in displayed_campaigns:
+        with st.expander(f"**{camp.company}** — {camp.job_title} · `{camp.contact_email}` [{camp.overall_status.upper()}]"):
+            c_meta, c_actions = st.columns([2, 1])
+            with c_meta:
+                c_name = camp.contact_name or "Hiring Team"
+                c_pos = f" ({camp.contact_position})" if camp.contact_position else ""
+                st.markdown(f"**Contact:** {c_name}{c_pos} · `{camp.contact_email}`")
+                st.caption(f"Created: {camp.created_at[:10]} · Last Updated: {camp.updated_at[:10]}")
+                if camp.linkedin_note:
+                    st.caption(f"**LinkedIn Note:** {camp.linkedin_note}")
+
+            with c_actions:
+                new_st = st.selectbox("Status", status_options[1:], 
+                                      index=status_options[1:].index(camp.overall_status) if camp.overall_status in status_options[1:] else 0,
+                                      key=f"status_sel_{camp.id}")
+                if new_st != camp.overall_status:
+                    outreach_tracker.update_status(camp.id, new_st)
+                    st.success(f"Updated status to {new_st}")
+                    st.rerun()
+
+            st.markdown("**Sequence Touchpoints:**")
+            for t_idx, t in enumerate(camp.touches):
+                t_num = t.get("touch_number", t_idx + 1)
+                t_status = t.get("status", "pending")
+                t_date = t.get("scheduled_date", "N/A")
+                t_sent = f" (sent at {t.get('sent_at')[:16]})" if t.get("sent_at") else ""
+                
+                col_t_info, col_t_act = st.columns([3, 1])
+                with col_t_info:
+                    st.markdown(f"- **Touch {t_num}:** *{t.get('subject')}* — `{t_status}` [Sched: {t_date}]{t_sent}")
+                    st.caption(f"Snippet: {t.get('body', '')[:120]}…")
+                with col_t_act:
+                    if t_status == "pending":
+                        if st.button(f"Send Touch {t_num}", key=f"send_crm_{camp.id}_{t_idx}"):
+                            d_res = email_dispatcher.send_email(
+                                to_email=camp.contact_email,
+                                subject=t.get("subject", ""),
+                                body_text=t.get("body", ""),
+                            )
+                            if d_res.success:
+                                outreach_tracker.mark_touch_sent(camp.id, t_idx)
+                                st.success(f"Touch {t_num} dispatched!")
+                                st.rerun()
+                            else:
+                                st.error(f"Error: {d_res.error}")
+
+            # Notes section
+            st.markdown("**Campaign Notes:**")
+            notes_val = st.text_area("Notes", camp.notes, key=f"notes_{camp.id}", height=68)
+            if st.button("Save Notes", key=f"save_notes_{camp.id}"):
+                camp.notes = notes_val
+                outreach_tracker.save_record(camp)
+                st.success("Notes saved.")
+
+
+# ---------------------------------------------------------------------------
 
 if page == "👤 Profile":
     page_profile()
 elif page == "🚀 Run JobScout":
     page_run()
+elif page == "📬 Outreach CRM":
+    page_outreach_crm()
 else:
     page_history()

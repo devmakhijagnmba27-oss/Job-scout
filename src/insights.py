@@ -64,7 +64,7 @@ if __name__ == "__main__":
     from rich.console import Console
     from rich.table import Table
 
-    console = Console()
+    console = Console(legacy_windows=False)
     gaps = aggregate_dimension_gaps(Records().all())
     if not gaps:
         console.print("[yellow]No scored jobs yet — run JobScout first.[/yellow]")

@@ -23,7 +23,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP
+except (ImportError, ModuleNotFoundError):
+    try:
+        from mcp.server.mcpserver import FastMCP
+    except (ImportError, ModuleNotFoundError):
+        from mcp.server import FastMCP
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from schema import Job, SearchQuery, dedupe  # noqa: E402

@@ -32,7 +32,7 @@ SUPPORTED_DOC_SUFFIXES = (".pdf", ".txt", ".md")
 # gitignore pattern covers these too, with no separate rule needed.
 WRITING_SAMPLES_DIR = DOCUMENTS_DIR / "writing_samples"
 
-console = Console()
+console = Console(legacy_windows=False)
 
 
 def load_profile() -> dict | None:

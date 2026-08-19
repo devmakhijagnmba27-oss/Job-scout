@@ -27,7 +27,7 @@ from rich.prompt import Prompt
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AUDIT_LOG = REPO_ROOT / "logs" / "audit.jsonl"
 
-console = Console()
+console = Console(legacy_windows=False)
 
 # ---------------------------------------------------------------------------
 # PII masking

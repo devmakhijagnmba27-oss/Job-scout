@@ -87,7 +87,12 @@ class LinkedInAdapter(JobSourceAdapter):
         if kw:
             params["keywords"] = kw
         if query.locations:
-            params["location"] = query.locations[0]
+            loc = query.locations[0].strip()
+            loc_lower = loc.lower()
+            indian_cities = ("delhi", "ncr", "gurgaon", "gurugram", "noida", "bangalore", "bengaluru", "mumbai", "pune", "hyderabad", "chennai", "kolkata")
+            if any(k in loc_lower for k in indian_cities) and "india" not in loc_lower:
+                loc = f"{loc}, India"
+            params["location"] = loc
         if query.remote_only:
             params["f_WT"] = "2"
         jt = ",".join(_F_JT[t] for t in self.employment_types if t in _F_JT)
