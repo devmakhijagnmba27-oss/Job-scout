@@ -104,9 +104,9 @@ class GeminiClient(BaseLLMClient):
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY is not set. Please add GEMINI_API_KEY to your Streamlit Secrets (under Advanced Settings) or your .env file.")
         self.client = genai.Client(api_key=self.api_key)
-        self.model = model or _get_secret("JOBSCOUT_MODEL", "gemini-2.5-flash")
-        # Flash-tier models only for free-tier compatibility
-        self.fallback_models = [self.model, "gemini-2.5-flash", "gemini-1.5-flash"]
+        self.model = model or _get_secret("JOBSCOUT_MODEL", "gemini-3.6-flash")
+        # Supported Flash-tier models
+        self.fallback_models = [self.model, "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-flash-latest"]
 
     def _call_with_retry(self, prompt: str, is_json: bool = False, max_retries: int = 4) -> str:
         import time
