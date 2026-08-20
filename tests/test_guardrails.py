@@ -8,7 +8,7 @@ Spec: specs/scenarios.feature — "PII never reaches the model",
 from datetime import datetime, timedelta, timezone
 
 from src.guardrails import (PIIMasker, employment_type_allowed,
-                            legitimacy_check, posting_is_recent,
+                            is_sales_role, legitimacy_check, posting_is_recent,
                             violates_dealbreakers)
 
 RESUME = (
@@ -203,3 +203,24 @@ def test_legitimacy_check_reposting_requires_same_title_and_company():
 def test_legitimacy_check_no_past_entries_does_not_crash():
     assert legitimacy_check(_job(), None)["tier"] == "high_confidence"
     assert legitimacy_check(_job(), [])["tier"] == "high_confidence"
+
+
+def test_is_sales_role_identifies_sales_and_sales_marketing():
+    assert is_sales_role("Sales & Marketing Executive") is True
+    assert is_sales_role("Sales Representative") is True
+    assert is_sales_role("Business Development Associate") is True
+    assert is_sales_role("BDR / SDR Intern") is True
+    assert is_sales_role("Account Executive - Inside Sales") is True
+    assert is_sales_role("Telemarketing Specialist") is True
+    assert is_sales_role("Field Sales Manager") is True
+    assert is_sales_role("Marketing Trainee", "100% commission cold calling leads") is True
+
+
+def test_is_sales_role_safely_allows_pure_marketing():
+    assert is_sales_role("Digital Marketing Specialist", "Collaborate with sales team to align messaging") is False
+    assert is_sales_role("Brand Strategist", "Provide market research to executive leadership") is False
+    assert is_sales_role("Social Media Manager", "Drive engagement across Meta and TikTok") is False
+    assert is_sales_role("Growth Marketing Associate", "Run paid ad campaigns and optimize CAC") is False
+    assert is_sales_role("Content Marketing Specialist", "Write blog posts and sales enablement collateral") is False
+    assert is_sales_role("Product Marketing Manager", "Positioning and go-to-market launches") is False
+

@@ -29,3 +29,5 @@ venv/
 # Local agent tooling (machine-local settings + vendored skill copies)
 .claude/
 .agents/
+.playwright-mcp/
+

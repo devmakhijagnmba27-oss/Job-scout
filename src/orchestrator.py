@@ -35,7 +35,7 @@ from .archetype import guess_archetype
 from .contacts import find_contacts
 from .cv_pipeline import generate_cv_pdf
 from .guardrails import (PIIMasker, audit, employment_type_allowed, hitl_gate,
-                         legitimacy_check, posting_is_recent,
+                         is_sales_role, legitimacy_check, posting_is_recent,
                          violates_dealbreakers)
 from .intake import (extract_profile_text, extract_writing_samples_text,
                      load_profile, run_wizard)
@@ -95,6 +95,7 @@ def deterministic_filter(jobs: list[dict], profile: dict,
     instead of leaving the user guessing."""
     prefs = profile.get("preferences", {})
     dealbreakers = prefs.get("dealbreakers", [])
+    exclude_sales = prefs.get("exclude_sales", True)  # Strictly avoid sales marketing
     allowed_types = prefs.get("employment_types", [])
     salary_floor = prefs.get("salary_floor_usd", 0) or 0
     max_age_days = prefs.get("max_posting_age_days") or None
@@ -108,7 +109,18 @@ def deterministic_filter(jobs: list[dict], profile: dict,
         if not employment_type_allowed(job["employment_type"], allowed_types):
             dropped["type"] += 1
             continue
-        if violates_dealbreakers(f"{job['title']} {job['description']}", dealbreakers):
+
+        # Strict Sales & Sales-Marketing exclusion:
+        # Avoid sales positions (Sales Rep, Business Development, BDR, SDR, Inside Sales, etc.)
+        # while safely keeping pure marketing roles that mention collaborating with sales.
+        sales_flagged = any("sale" in db.lower() or "bizdev" in db.lower() or "bdr" in db.lower() for db in dealbreakers)
+        if (exclude_sales or sales_flagged) and is_sales_role(job.get("title", ""), job.get("description", "")):
+            dropped["dealbreaker"] += 1
+            continue
+
+        # Check non-sales dealbreakers across full text
+        non_sales_dealbreakers = [db for db in dealbreakers if not any(k in db.lower() for k in ("sale", "bizdev", "bdr", "sdr"))]
+        if non_sales_dealbreakers and violates_dealbreakers(f"{job['title']} {job['description']}", non_sales_dealbreakers):
             dropped["dealbreaker"] += 1
             continue
         # Only enforce the floor when the posting states a max salary below it

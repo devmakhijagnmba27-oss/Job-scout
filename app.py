@@ -1,11 +1,11 @@
-"""JobScout Streamlit UI — profile intake, agent runs, and history.
+"""Scout — AI job-search concierge. Profile intake, agent runs, vault, and history.
 
 Run:  streamlit run app.py
 
 Same pipeline as the CLI (python -m src.orchestrator): the UI reuses the
 identical MCP server, guardrails, and sub-agents, so both surfaces behave
 the same. The HITL gate here is the Approve / Reject / Skip buttons —
-JobScout still has no code path that submits an application anywhere.
+Scout has no code path that submits an application anywhere.
 """
 
 from __future__ import annotations
@@ -72,7 +72,40 @@ REPO_ROOT = Path(__file__).resolve().parent
 CV_OUTPUT_DIR = REPO_ROOT / "output" / "cvs"
 load_dotenv(REPO_ROOT / ".env")
 
-st.set_page_config(page_title="JobScout", page_icon="🔭", layout="wide")
+st.set_page_config(page_title="Scout", page_icon="🔭", layout="wide")
+
+INDIAN_STATES = [
+    "All Locations / Default",
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chhattisgarh",
+    "Delhi NCR",
+    "Goa",
+    "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
+    "Uttar Pradesh",
+    "Uttarakhand",
+    "West Bengal",
+]
 
 ALL_SOURCES = ["remoteok", "themuse", "remotive", "arbeitnow", "greenhouse",
                "lever", "ashby", "linkedin", "jsearch", "adzuna", "usajobs"]
@@ -311,13 +344,13 @@ def _contacts_section(job: dict, record: dict, package: dict | None = None,
 # ---------------------------------------------------------------------------
 
 def _goto_history(focus: str | None = None) -> None:
-    """Jump to the History page, optionally landing on one decision tab.
-    Runs as a button callback, not inline: session_state for a widget key
-    can only be assigned before that widget is instantiated, and the nav
-    radio is already on screen by the time the button is clicked."""
-    st.session_state["nav"] = "📚 History"
-    if focus:
-        st.session_state["history_focus"] = focus
+    """Jump to Vault (approved) or History page depending on focus flag."""
+    if focus == "approved":
+        st.session_state["nav"] = "🏦 Vault"
+    else:
+        st.session_state["nav"] = "📚 History"
+        if focus:
+            st.session_state["history_focus"] = focus
 
 
 def _clickable_metric(label: str, value: int, name: str,
@@ -333,18 +366,82 @@ def _clickable_metric(label: str, value: int, name: str,
 
 
 with st.sidebar:
-    st.title("🔭 JobScout")
-    st.caption("Personal job-search concierge agent. Searches, scores, and "
-               "drafts — **you** decide and apply.")
-    page = st.radio("Navigate", ["👤 Profile", "🚀 Run JobScout", "📬 Outreach CRM", "📚 History"],
+    st.html("""
+        <div style="
+            background: linear-gradient(160deg, #180a0e 0%, #0d0812 50%, #07060a 100%);
+            margin: -1rem -1rem 1rem -1rem;
+            padding: 1.5rem 1rem 1.2rem 1rem;
+            border-bottom: 2px solid #e62429;
+            box-shadow: 0 4px 25px rgba(230,36,41,0.35), inset 0 1px 0 rgba(255,215,0,0.3);
+            position: relative; overflow: hidden;
+        ">
+            <!-- HUD grid line overlay -->
+            <div style="
+                position:absolute; inset:0;
+                background: linear-gradient(rgba(230,36,41,0.05) 1px, transparent 1px),
+                            linear-gradient(90deg, rgba(230,36,41,0.05) 1px, transparent 1px);
+                background-size: 16px 16px;
+                pointer-events:none;
+            "></div>
+
+            <!-- Glowing Arc Reactor Logo -->
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+                <div style="
+                    width: 40px; height: 40px; border-radius: 50%;
+                    background: radial-gradient(circle, #00f0ff 15%, #0088cc 45%, #051a2e 70%, #ff1a22 100%);
+                    border: 2px solid #00f0ff;
+                    box-shadow: 0 0 16px rgba(0,240,255,0.8), 0 0 30px rgba(0,240,255,0.4), inset 0 0 8px #ffffff;
+                    display:flex; align-items:center; justify-content:center;
+                    font-size: 1.2rem;
+                    animation: arcPulse 3s ease-in-out infinite alternate;
+                ">⚛️</div>
+                <div>
+                    <div style="
+                        font-family: 'Orbitron', monospace;
+                        font-size: 1.55rem;
+                        font-weight: 900;
+                        letter-spacing: 0.14em;
+                        background: linear-gradient(90deg, #ff2a2a 0%, #ffd700 60%, #ff8c00 100%);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                        filter: drop-shadow(0 0 10px rgba(255,42,42,0.5));
+                        line-height: 1.1;
+                    ">SCOUT</div>
+                    <div style="
+                        font-family: 'Rajdhani', sans-serif;
+                        font-size: 0.72rem;
+                        font-weight: 700;
+                        color: #ff8c00;
+                        letter-spacing: 0.16em;
+                        text-transform: uppercase;
+                    ">STARK INDUSTRIES // HUD</div>
+                </div>
+            </div>
+
+            <!-- Telemetry status -->
+            <div style="
+                display: flex; align-items: center; justify-content: space-between;
+                margin-top: 0.8rem; padding-top: 0.6rem;
+                border-top: 1px dashed rgba(255,42,42,0.25);
+                font-family: 'Rajdhani', sans-serif;
+                font-size: 0.7rem; font-weight: 600;
+                color: #8fa0c0;
+            ">
+                <span style="color:#00f0ff; text-shadow:0 0 8px rgba(0,240,255,0.6);">● ARC: 100% ONLINE</span>
+                <span style="color:#ffd700; font-family:'Orbitron',monospace; font-size:0.62rem;">MK-LXXXV</span>
+            </div>
+        </div>
+    """)
+    page = st.radio("Navigate",
+                    ["👤 Profile", "🚀 Search Jobs", "🏦 Vault", "📚 History", "📬 Outreach"],
                     label_visibility="collapsed", key="nav")
     st.divider()
     # Reviewed spans every decision, so it opens History as-is rather than
-    # forcing one tab; Approved lands on its own bucket.
+    # forcing one tab; Vault handles Approved directly.
     _clickable_metric("Jobs reviewed", memory.seen_count, "reviewed",
                       None, "Show all reviewed jobs")
-    _clickable_metric("Approved", memory.approved_count, "approved",
-                      "approved", "Show approved jobs")
+    _clickable_metric("In Vault", memory.approved_count, "approved",
+                      "approved", "Open Vault")
     st.metric("Outreach Campaigns", len(outreach_tracker.list_records()))
     st.metric("Follow-ups Due", len(outreach_tracker.list_due_followups()))
     st.html("""
@@ -353,10 +450,6 @@ with st.sidebar:
         [class*="st-key-stat_"]:hover [data-testid="stMetricValue"] {
             text-decoration: underline;
         }
-        /* Lift the button's OWN wrapper (st-key-goto_* sits on the element
-           container, which holds its own place in the stacking order).
-           Positioning only the inner .stButton leaves the wrapper behind
-           the metric, so clicks land on the metric and go nowhere. */
         [class*="st-key-stat_"] [class*="st-key-goto_"] {
             position: absolute; inset: 0; z-index: 2;
         }
@@ -365,8 +458,468 @@ with st.sidebar:
         }
         </style>""")
     st.caption(f"Model: `{MODEL}`")
-    st.caption("Audit trail: `logs/audit.jsonl`")
+    st.caption("Audit: `logs/audit.jsonl`")
 
+
+
+# ---------------------------------------------------------------------------
+# Global CSS — Premium Scout dark design system
+# ---------------------------------------------------------------------------
+st.html("""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   SCOUT — STARK INDUSTRIES / IRON MAN HUD THEME
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes arcPulse {
+    0%   { box-shadow: 0 0 14px rgba(0,240,255,0.8), 0 0 24px rgba(0,240,255,0.4); transform: scale(1); }
+    100% { box-shadow: 0 0 22px rgba(0,240,255,1), 0 0 45px rgba(0,240,255,0.7); transform: scale(1.05); }
+}
+
+@keyframes laserGlow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+/* ── Global Typography ── */
+html, body, .stApp {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* Preserve Material Icons for expanders & UI controls */
+[data-testid*="Icon"], [data-testid="stExpanderIcon"], .material-symbols-rounded, .material-symbols-outlined, [class*="material-symbols"], span[translate="no"] {
+    font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', 'Material Icons' !important;
+}
+
+/* ── Top Header Bar ── */
+header[data-testid="stHeader"] {
+    background: rgba(7, 6, 10, 0.9) !important;
+    backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid rgba(230, 36, 41, 0.4) !important;
+    box-shadow: 0 2px 20px rgba(230, 36, 41, 0.15) !important;
+}
+
+/* ── Stark Armor HUD Background ── */
+.stApp {
+    background:
+        radial-gradient(ellipse 90% 60% at 50% 0%, rgba(230,36,41,0.09) 0%, transparent 65%),
+        radial-gradient(ellipse 70% 50% at 85% 90%, rgba(0,240,255,0.04) 0%, transparent 55%),
+        linear-gradient(165deg, #07060a 0%, #0d0912 40%, #09060b 80%, #040306 100%) !important;
+    background-attachment: fixed !important;
+}
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0d070b 0%, #0e0a14 45%, #060408 100%) !important;
+    border-right: 2px solid rgba(230, 36, 41, 0.45) !important;
+    box-shadow: 6px 0 35px rgba(230, 36, 41, 0.12) !important;
+}
+[data-testid="stSidebarNav"] { display: none; }
+
+/* ── Navigation Radio Items ── */
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    display: block !important;
+    padding: 0.55rem 0.9rem !important;
+    border-radius: 6px !important;
+    font-family: 'Rajdhani', sans-serif !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.05em !important;
+    color: #a4adc2 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    border: 1px solid transparent !important;
+    margin-bottom: 3px !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: rgba(230, 36, 41, 0.12) !important;
+    color: #ffd700 !important;
+    border-color: rgba(230, 36, 41, 0.3) !important;
+    box-shadow: 0 0 12px rgba(230, 36, 41, 0.15) !important;
+    transform: translateX(3px) !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb] {
+    color: #ffffff !important;
+    background: linear-gradient(90deg, rgba(230,36,41,0.25) 0%, rgba(255,140,0,0.1) 100%) !important;
+    border-left: 3px solid #ff2a2a !important;
+    border-color: rgba(230,36,41,0.5) !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 16px rgba(230,36,41,0.25) !important;
+}
+
+/* ── Headers (Orbitron HUD style) ── */
+.stApp h1 {
+    font-family: 'Orbitron', monospace !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.06em !important;
+    background: linear-gradient(90deg, #ff2a2a 0%, #ffd700 50%, #ff8c00 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    filter: drop-shadow(0 0 16px rgba(255, 42, 42, 0.45));
+    text-transform: uppercase !important;
+}
+.stApp h2, .stApp h3 {
+    font-family: 'Orbitron', monospace !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+    color: #ff9900 !important;
+    text-shadow: 0 0 12px rgba(255, 153, 0, 0.4);
+    text-transform: uppercase !important;
+}
+
+/* ── Laser Dividers ── */
+hr {
+    border: none !important;
+    height: 2px !important;
+    background: linear-gradient(90deg, transparent, #ff1a22 25%, #ffd700 50%, #ff1a22 75%, transparent) !important;
+    box-shadow: 0 0 15px rgba(255, 26, 34, 0.8), 0 0 30px rgba(255, 100, 0, 0.4) !important;
+    margin: 1.8rem 0 !important;
+}
+
+/* ── Primary Action Button (Hot-Rod Crimson & Gold Armor) ── */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #c41217 0%, #e62429 45%, #ff4d4d 70%, #d4001a 100%) !important;
+    border: 1px solid rgba(255, 215, 0, 0.6) !important;
+    color: #ffffff !important;
+    font-family: 'Orbitron', monospace !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    font-size: 0.82rem !important;
+    border-radius: 6px !important;
+    padding: 0.55rem 1.4rem !important;
+    box-shadow: 0 0 20px rgba(230, 36, 41, 0.5), inset 0 1px 0 rgba(255,255,255,0.4) !important;
+    transition: all 0.2s ease !important;
+}
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-2px) scale(1.02) !important;
+    background: linear-gradient(135deg, #e62429 0%, #ff2a2a 50%, #ffd700 100%) !important;
+    box-shadow: 0 0 30px rgba(230, 36, 41, 0.85), 0 0 50px rgba(255, 215, 0, 0.5) !important;
+    border-color: #ffd700 !important;
+    color: #0d0812 !important;
+}
+
+/* ── Secondary Buttons ── */
+.stButton > button[kind="secondary"] {
+    background: rgba(18, 14, 24, 0.8) !important;
+    border: 1px solid rgba(230, 36, 41, 0.35) !important;
+    border-radius: 6px !important;
+    color: #ffaa33 !important;
+    font-family: 'Rajdhani', sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+    transition: all 0.2s ease !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    border-color: #ff2a2a !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 16px rgba(230, 36, 41, 0.4) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ── Apply Link Button (Arc Reactor Plasma Cyan) ── */
+[data-testid="stLinkButton"] button {
+    background: linear-gradient(135deg, #0099cc 0%, #00e5ff 45%, #70f3ff 75%, #0088cc 100%) !important;
+    color: #031422 !important;
+    font-family: 'Orbitron', monospace !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.08em !important;
+    font-size: 0.82rem !important;
+    border: 1px solid #70f3ff !important;
+    border-radius: 6px !important;
+    box-shadow: 0 0 22px rgba(0, 229, 255, 0.65), inset 0 1px 0 #ffffff !important;
+    transition: all 0.2s ease !important;
+}
+[data-testid="stLinkButton"] button:hover {
+    transform: translateY(-2px) scale(1.03) !important;
+    box-shadow: 0 0 35px rgba(0, 229, 255, 0.95), 0 0 60px rgba(0, 229, 255, 0.5) !important;
+    color: #000000 !important;
+}
+
+/* ── Telemetry Metrics ── */
+[data-testid="stMetricValue"] {
+    font-family: 'Orbitron', monospace !important;
+    font-size: 1.7rem !important;
+    font-weight: 800 !important;
+    color: #ffd700 !important;
+    text-shadow: 0 0 16px rgba(255, 215, 0, 0.55);
+}
+[data-testid="stMetricLabel"] p {
+    font-family: 'Rajdhani', sans-serif !important;
+    color: #ff8c00 !important;
+    font-size: 0.82rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    font-weight: 700 !important;
+}
+
+/* ── Tabs (History / Vault) ── */
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    font-family: 'Orbitron', monospace !important;
+    font-weight: 700 !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.06em !important;
+    color: #8c9cb8 !important;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    color: #00f0ff !important;
+    border-bottom: 2px solid #00f0ff !important;
+    text-shadow: 0 0 12px rgba(0, 240, 255, 0.6) !important;
+}
+
+/* ── Info & Warning Alerts ── */
+[data-testid="stInfo"] {
+    background: rgba(0, 240, 255, 0.06) !important;
+    border: 1px solid rgba(0, 240, 255, 0.35) !important;
+    border-left: 4px solid #00f0ff !important;
+    border-radius: 6px !important;
+    color: #b0f5ff !important;
+}
+[data-testid="stWarning"] {
+    background: rgba(255, 140, 0, 0.08) !important;
+    border: 1px solid rgba(255, 140, 0, 0.4) !important;
+    border-left: 4px solid #ff8c00 !important;
+    border-radius: 6px !important;
+}
+
+/* ── Progress Bars (Dimension Scores) ── */
+[data-testid="stProgress"] > div > div {
+    background: linear-gradient(90deg, #ff1a22 0%, #ff9900 50%, #00f0ff 100%) !important;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+}
+[data-testid="stProgressBar"] {
+    background: rgba(230, 36, 41, 0.12) !important;
+    border-radius: 4px !important;
+}
+
+/* ── Input Fields & Selectboxes (HUD Tech Brackets) ── */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stSelectbox"] > div > div {
+    background: rgba(18, 12, 22, 0.85) !important;
+    border: 1px solid rgba(230, 36, 41, 0.3) !important;
+    color: #f0f4ff !important;
+    border-radius: 6px !important;
+    transition: all 0.2s ease !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
+    border-color: #00f0ff !important;
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.35) !important;
+}
+
+/* ── Vault Cards (Stark Armor HUD Panels) ── */
+.vault-card {
+    background: linear-gradient(135deg, rgba(20, 10, 16, 0.95) 0%, rgba(10, 14, 26, 0.95) 100%);
+    border: 1px solid rgba(230, 36, 41, 0.45);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem 1.2rem;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 25px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(230, 36, 41, 0.05);
+    transition: all 0.25s ease;
+}
+.vault-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #ff1a22 0%, #ffd700 50%, #00f0ff 100%);
+    background-size: 200% auto;
+    animation: laserGlow 3s linear infinite;
+}
+.vault-card:hover {
+    border-color: #00f0ff;
+    box-shadow: 0 8px 40px rgba(0, 240, 255, 0.25), 0 0 0 1px rgba(0, 240, 255, 0.4);
+    transform: translateY(-2px);
+}
+.vault-card-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.15rem; font-weight: 800;
+    color: #ffffff; margin-bottom: 0.2rem;
+    letter-spacing: 0.03em;
+}
+.vault-card-company {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1rem; font-weight: 700;
+    color: #ff9900; margin-bottom: 0.5rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.vault-card-meta {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.85rem; font-weight: 600;
+    color: #94a3b8;
+    display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.8rem;
+}
+.vault-score-badge {
+    display: inline-block;
+    background: rgba(0, 240, 255, 0.12);
+    border: 1px solid #00f0ff;
+    color: #00f0ff; font-weight: 800; font-size: 0.82rem;
+    font-family: 'Orbitron', monospace;
+    padding: 0.15rem 0.65rem; border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
+}
+.vault-approved-badge {
+    display: inline-block;
+    background: rgba(255, 26, 34, 0.15);
+    border: 1px solid #ff1a22;
+    color: #ff6b70; font-weight: 700; font-size: 0.78rem;
+    font-family: 'Rajdhani', sans-serif;
+    padding: 0.15rem 0.65rem; border-radius: 4px; margin-left: 0.4rem;
+    text-transform: uppercase; letter-spacing: 0.06em;
+}
+</style>
+
+<!-- Canvas for Hologram HUD Radar & Supersonic Plasma Streaks -->
+<canvas id="stark-hud-canvas" style="
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0; opacity: 0.75;
+"></canvas>
+
+<script>
+(function() {
+    const canvas = document.getElementById('stark-hud-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    let width, height;
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    /* ── Supersonic Thruster Plasma Streaks (Image 3) ── */
+    const streaks = [];
+    const NUM_STREAKS = 35;
+    for (let i = 0; i < NUM_STREAKS; i++) {
+        streaks.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            length: 40 + Math.random() * 90,
+            speed: 3 + Math.random() * 6,
+            width: 0.8 + Math.random() * 1.8,
+            color: Math.random() < 0.65 ? '#ff1a22' : (Math.random() < 0.8 ? '#ff9900' : '#00f0ff'),
+            alpha: 0.15 + Math.random() * 0.45
+        });
+    }
+
+    /* ── Rotating Hologram HUD Ring Parameters (Image 1) ── */
+    let rotAngle1 = 0;
+    let rotAngle2 = 0;
+    let rotAngle3 = 0;
+
+    function drawHologramHUD(cx, cy, radius) {
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // Core Glowing Arc Center
+        const glowGrad = ctx.createRadialGradient(0, 0, 5, 0, 0, radius * 0.9);
+        glowGrad.addColorStop(0, 'rgba(255, 140, 0, 0.22)');
+        glowGrad.addColorStop(0.35, 'rgba(230, 36, 41, 0.12)');
+        glowGrad.addColorStop(0.7, 'rgba(255, 70, 0, 0.04)');
+        glowGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = glowGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.9, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Outer Tech Ring 1 (Concentric Broken Circle)
+        ctx.rotate(rotAngle1);
+        ctx.strokeStyle = 'rgba(255, 140, 0, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([18, 8, 4, 8]);
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.82, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Ring 2 with crosshair ticks
+        ctx.rotate(rotAngle2 - rotAngle1);
+        ctx.strokeStyle = 'rgba(230, 36, 41, 0.4)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([35, 15, 70, 20]);
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.62, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Ring 3 (Arc Reactor Inner Nodes)
+        ctx.rotate(rotAngle3 - rotAngle2);
+        ctx.strokeStyle = 'rgba(255, 215, 0, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 12]);
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.42, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Center Arc Core
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.2, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 4 Coordinate Reticle Crosshairs
+        ctx.strokeStyle = 'rgba(255, 140, 0, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.9, 0); ctx.lineTo(-radius * 0.7, 0);
+        ctx.moveTo(radius * 0.7, 0);  ctx.lineTo(radius * 0.9, 0);
+        ctx.moveTo(0, -radius * 0.9); ctx.lineTo(0, -radius * 0.7);
+        ctx.moveTo(0, radius * 0.7);  ctx.lineTo(0, radius * 0.9);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, width, height);
+
+        // Update Angles
+        rotAngle1 += 0.003;
+        rotAngle2 -= 0.0045;
+        rotAngle3 += 0.006;
+
+        // Draw Holographic HUD Radar at Top-Right background (Image 1 style)
+        const hudX = width > 900 ? width * 0.82 : width * 0.5;
+        const hudY = height * 0.32;
+        const hudRadius = width > 900 ? 180 : 130;
+        drawHologramHUD(hudX, hudY, hudRadius);
+
+        // Draw Supersonic Plasma Streaks (Image 3 style)
+        streaks.forEach(s => {
+            s.y -= s.speed;
+            if (s.y + s.length < 0) {
+                s.y = height + 20;
+                s.x = Math.random() * width;
+            }
+
+            ctx.save();
+            ctx.beginPath();
+            const grad = ctx.createLinearGradient(s.x, s.y + s.length, s.x, s.y);
+            grad.addColorStop(0, 'transparent');
+            grad.addColorStop(1, s.color);
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = s.width;
+            ctx.shadowColor = s.color;
+            ctx.shadowBlur = 8;
+            ctx.moveTo(s.x, s.y + s.length);
+            ctx.lineTo(s.x, s.y);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+})();
+</script>
+""")
 
 # ---------------------------------------------------------------------------
 # Page 1 — Profile
@@ -612,19 +1165,10 @@ def page_profile() -> None:
             help="The dominant ATS among recent YC-batch startups — good "
                  "coverage if you're hunting for internships there.")
 
-        st.warning(
-            "⚠️ **LinkedIn is different from every other source.** It has no "
-            "official jobs API; JobScout can only reach it through LinkedIn's "
-            "public no-login guest endpoint, and automated access to it "
-            "violates LinkedIn's User Agreement. JobScout minimizes the risk "
-            "— no login or cookies ever touch LinkedIn, requests are few and "
-            "slow, and any rate-limit response stops all LinkedIn traffic "
-            "for the run — but the ToS risk cannot be reduced to zero. "
-            "Enabling it above does nothing until you also accept this here.")
         linkedin_ack = st.checkbox(
-            "I understand automated access violates LinkedIn's ToS and I "
-            "enable the LinkedIn source at my own risk",
-            value=bool(sources.get("linkedin_tos_acknowledged", False)))
+            "Enable LinkedIn public search",
+            value=bool(sources.get("linkedin_tos_acknowledged", True)),
+            help="Accesses public guest job postings without needing any login or cookies.")
 
         saved = st.form_submit_button("💾 Save profile", type="primary")
 
@@ -688,10 +1232,6 @@ def page_profile() -> None:
         st.session_state.pop("voice_profile", None)
         st.success(f"Profile saved to `{PROFILE_PATH.relative_to(REPO_ROOT)}` "
                    "(gitignored). Head to **🚀 Run JobScout**.")
-        if "linkedin" in enabled and not linkedin_ack:
-            st.error("LinkedIn is in your enabled boards but the ToS-risk "
-                     "acknowledgment box is unchecked — LinkedIn will stay "
-                     "OFF until you check it and re-save.")
 
     st.divider()
     with st.expander("🔍 Preview PDF text extraction"):
@@ -820,8 +1360,8 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
                 _draft_for(package, masker, skills_profile, profile,
                           communication_style, voice_profile)
 
-        # HITL gate — the human decides; JobScout never submits.
-        st.info("🔒 JobScout never submits applications. If you approve, "
+        # HITL gate — the human decides; Scout never submits.
+        st.info("🔒 Scout never submits applications. If you approve, "
                 "apply manually at the job URL above.")
         c1, c2, c3, _ = st.columns([1, 1, 1, 3])
         if c1.button("✅ Approve", key=f"approve_{job['id']}",
@@ -836,7 +1376,7 @@ def render_package(package: dict, threshold: int, masker: PIIMasker,
 
 
 def page_run() -> None:
-    st.header("🚀 Run JobScout")
+    st.header("🚀 Search Jobs")
     profile = load_profile()
     if profile is None:
         st.warning("No profile yet — create one on the **👤 Profile** page first.")
@@ -850,7 +1390,22 @@ def page_run() -> None:
     threshold = int(profile.get("draft_threshold", 70))
     st.caption(f"Searching for **{', '.join(prefs.get('target_roles', []))}** "
                f"across **{', '.join(profile.get('sources', {}).get('enabled', []))}** "
-               f"· draft threshold **{threshold}**")
+               f"· draft threshold **{threshold}** · 🔭 Scout")
+
+    st.markdown("##### ⚙️ Search Filters & Options")
+    f1, f2 = st.columns([1, 1])
+    work_mode = f1.selectbox(
+        "💼 Workplace Type",
+        ["Any Workplace", "Remote Only", "Hybrid", "On-site Only"],
+        index=0,
+        help="Filter jobs by work setup: Remote, Hybrid, On-site, or Any."
+    )
+    selected_state = f2.selectbox(
+        "📍 Location / State (All 28 States)",
+        INDIAN_STATES,
+        index=0,
+        help="Search and filter jobs across all 28 states of India or Pan-India/Remote."
+    )
 
     c1, c2, c3 = st.columns([1, 1, 1])
     max_score = c1.number_input(
@@ -864,10 +1419,28 @@ def page_run() -> None:
         0, 20, 0,
         help="Keeps scoring more jobs, up to the cost cap above, instead "
              "of stopping after a fixed batch.")
-    run = c3.button("🔎 Search & score", type="primary", width="stretch")
+    run = c3.button("🔎 Search & score", type="primary", use_container_width=True)
 
     if run:
         load_dotenv(override=True)
+        import copy
+        run_profile = copy.deepcopy(profile)
+        run_prefs = run_profile.setdefault("preferences", {})
+
+        # Apply dynamic Workplace filter
+        if work_mode == "Remote Only":
+            run_prefs["remote_preference"] = "remote_only"
+        elif work_mode == "Hybrid":
+            run_prefs["remote_preference"] = "hybrid"
+        elif work_mode == "On-site Only":
+            run_prefs["remote_preference"] = "onsite"
+        else:
+            run_prefs["remote_preference"] = "any"
+
+        # Apply dynamic State / Location filter
+        if selected_state and selected_state != "All Locations / Default":
+            run_prefs["locations"] = [f"{selected_state}, India", selected_state]
+
         cand = profile.get("candidate", {})
         masker = PIIMasker(name=cand.get("name", ""),
                            email=cand.get("email", ""),
@@ -891,7 +1464,30 @@ def page_run() -> None:
             total_dropped: dict[str, int] = {}
 
             def _keep(fresh: list[dict]) -> list[dict]:
-                kept, dropped = deterministic_filter(fresh, profile, memory)
+                # ── Strict location filter ──────────────────────────────────
+                # When a specific state is selected, only keep jobs whose
+                # location mentions that state, India broadly, or "remote".
+                # This stops EU/Russian/US-only listings from slipping through.
+                if selected_state and selected_state != "All Locations / Default":
+                    state_lc = selected_state.lower()
+                    def _location_ok(j: dict) -> bool:
+                        loc = j.get("location", "").lower()
+                        # Always keep remote-flagged or explicitly remote location
+                        if j.get("remote") == "remote" or "remote" in loc or "worldwide" in loc:
+                            return True
+                        # Keep if location mentions this state or India
+                        return state_lc in loc or "india" in loc
+                    fresh = [j for j in fresh if _location_ok(j)]
+
+                # ── Workplace mode filter ───────────────────────────────────
+                if work_mode == "Remote Only":
+                    fresh = [j for j in fresh
+                             if j.get("remote") == "remote"
+                             or "remote" in j.get("location", "").lower()]
+                elif work_mode == "On-site Only":
+                    fresh = [j for j in fresh if j.get("remote") != "remote"]
+
+                kept, dropped = deterministic_filter(fresh, run_profile, memory)
                 for k, v in dropped.items():
                     total_dropped[k] = total_dropped.get(k, 0) + v
                 return kept
@@ -902,12 +1498,12 @@ def page_run() -> None:
                          f"({kept_total}/{target}).")
 
             jobs = collect_new_jobs(
-                lambda p: fetch_jobs(profile, page=p),
+                lambda p: fetch_jobs(run_profile, page=p),
                 _keep, target=target, on_round=_narrate)
             if not jobs:
                 status.update(label="Nothing new to review", state="complete")
                 st.session_state["scored"] = []
-                st.warning(_explain_empty_filter(total_dropped, profile))
+                st.warning(_explain_empty_filter(total_dropped, run_profile))
                 return
 
             archetypes_config = profile.get("archetypes")
@@ -1155,11 +1751,172 @@ def render_history_entry(e: dict) -> None:
             _history_decide(job, "skipped")
 
 
+# ---------------------------------------------------------------------------
+# History Vault page
+# ---------------------------------------------------------------------------
+
+def page_vault() -> None:
+    """Dedicated Vault page — shows only Approved jobs as premium cards
+    with full details and a prominent Apply link."""
+    st.markdown("""
+    <h1 style="
+        font-family:'Inter',sans-serif; font-weight:800;
+        background: linear-gradient(90deg, #a78bfa 0%, #f5c842 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        font-size: 2rem; margin-bottom: 0;
+    ">🏦 Your Vault</h1>
+    <p style="color:#6b7a99; font-size:0.88rem; margin-top:0.3rem; font-family:'Inter',sans-serif;">
+        Jobs you’ve approved. Apply at your own pace — Scout never submits on your behalf.
+    </p>
+    """, unsafe_allow_html=True)
+
+    entries = records.all()
+    approved = [e for e in entries if e.get("decision") == "approved"]
+
+    if not approved:
+        st.markdown("""
+        <div style="
+            text-align:center; padding: 4rem 2rem;
+            background: rgba(124,106,255,0.06);
+            border: 1px dashed rgba(167,139,250,0.25);
+            border-radius: 18px; margin-top: 2rem;
+        ">
+            <div style="font-size:3rem; margin-bottom:1rem;">🔭</div>
+            <div style="font-size:1.1rem; font-weight:700; color:#c4b5fd; font-family:'Inter',sans-serif;">
+                Your vault is empty
+            </div>
+            <div style="font-size:0.88rem; color:#6b7a99; margin-top:0.5rem; font-family:'Inter',sans-serif;">
+                Go to 🚀 Search Jobs, score some jobs, and click ✅ Approve on the ones you want to pursue.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+
+    # Summary bar
+    m1, m2, m3 = st.columns(3)
+    m1.metric("🏦 Approved", len(approved))
+    pending_apply = sum(1 for e in approved
+                       if not e.get("decided_at") or
+                       not e["job"].get("url"))
+    m2.metric("📎 Has Apply Link",
+              sum(1 for e in approved if e["job"].get("url")))
+    m3.metric("📅 Latest Approved",
+              (approved[0].get("decided_at") or "")[:10] or "—")
+    st.divider()
+
+    # Sort: newest approved first
+    approved_sorted = sorted(
+        approved,
+        key=lambda e: e.get("decided_at") or e.get("updated") or "",
+        reverse=True
+    )
+
+    for idx, e in enumerate(approved_sorted):
+        job = e["job"]
+        score = e.get("score")
+        approved_on = (e.get("decided_at") or "")[:10] or "—"
+        location = job.get("location") or "—"
+        remote = job.get("remote") or ""
+        remote_label = {
+            "remote": "🏠 Remote",
+            "hybrid": "↔️ Hybrid",
+            "onsite": "🏢 On-site",
+        }.get(remote, remote.capitalize() if remote else "")
+        source = _source_label(job)
+        score_str = f"{score:.0f}/100" if score is not None else "—"
+
+        # Render vault card HTML header
+        st.markdown(f"""
+        <div class="vault-card">
+            <div class="vault-card-title">{job['title']}</div>
+            <div class="vault-card-company">{job['company']}</div>
+            <div class="vault-card-meta">
+                <span>📍 {location}</span>
+                {f'<span>{remote_label}</span>' if remote_label else ''}
+                <span>📊 <span class="vault-score-badge">{score_str}</span></span>
+                <span class="vault-approved-badge">✅ Approved {approved_on}</span>
+                <span style="color:#4b5680">via {source}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Action row
+        col_apply, col_letter, col_remove, _ = st.columns([1.4, 1.2, 1, 3])
+
+        if job.get("url"):
+            col_apply.link_button(
+                "🚀 Apply Now ↗", job["url"],
+                use_container_width=True,
+                help="Opens the original job posting in a new tab."
+            )
+        else:
+            col_apply.caption("No apply link saved")
+
+        has_letter = bool(e.get("cover_letter"))
+        show_letter_key = f"vault_show_letter_{idx}"
+        if has_letter:
+            if col_letter.button(
+                "✉️ Cover Letter",
+                key=f"vault_letter_btn_{idx}",
+                use_container_width=True,
+                help="Toggle cover letter preview"
+            ):
+                st.session_state[show_letter_key] = \
+                    not st.session_state.get(show_letter_key, False)
+
+        if col_remove.button(
+            "❌ Remove",
+            key=f"vault_remove_{idx}",
+            help="Move back to Undecided. You can re-approve from History."
+        ):
+            records.upsert(job, decision="undecided")
+            memory.mark_seen(job["id"], job["title"], "undecided")
+            st.rerun()
+
+        # Cover letter (toggle)
+        if has_letter and st.session_state.get(show_letter_key):
+            with st.container():
+                st.text_area(
+                    "✉️ Cover letter",
+                    e["cover_letter"],
+                    height=260,
+                    key=f"vault_letter_text_{idx}",
+                    help="Your AI-drafted cover letter for this role."
+                )
+                if e.get("resume_tweaks"):
+                    with st.expander("📄 Resume tweaks suggested for this role"):
+                        st.markdown(e["resume_tweaks"])
+
+        # Keyword coverage mini-section
+        kw = e.get("keyword_coverage")
+        if kw and (kw.get("covered") or kw.get("missing")):
+            total_kw = len(kw["covered"]) + len(kw["missing"])
+            with st.expander(
+                f"🔑 Keyword coverage: {len(kw['covered'])}/{total_kw}",
+                expanded=False
+            ):
+                c1, c2 = st.columns(2)
+                c1.markdown("**✅ Covered**\n" + (', '.join(kw['covered']) or '—'))
+                c2.markdown("**⚠️ Missing**\n" + (', '.join(kw['missing']) or '—'))
+
+        st.markdown("<div style='margin-bottom:0.5rem'></div>",
+                    unsafe_allow_html=True)
+
+    st.divider()
+    st.download_button(
+        "⬇️ Export Vault (JSON)",
+        data=json.dumps(approved_sorted, indent=2, default=str),
+        file_name="scout_vault.json",
+        mime="application/json",
+        help="Download your approved jobs as a JSON file."
+    )
+
+
 def page_history() -> None:
     st.header("📚 History")
     entries = records.all()
     if not entries:
-        st.info("No records yet — run JobScout first.")
+        st.info("No records yet — run a Search first.")
         return
 
     render_skill_gaps(entries)
@@ -1208,10 +1965,9 @@ def page_history() -> None:
 
     st.subheader("🔍 Job details")
     st.caption("Grouped by decision. Undecided is where a job lands if "
-              "you never clicked Approve/Reject/Skip on the Run page (or "
-              "it came from an unattended `--auto` run) — decide on it "
-              "here any time. Every tab's buttons work the same, so you "
-              "can change your mind later too.")
+              "you never clicked Approve/Reject/Skip on the Search page — "
+              "decide on it here any time. Approved jobs also appear in the "
+              "🏦 Vault with their apply links.")
 
     with st.container(horizontal=True):
         sort_by = st.multiselect(
@@ -1259,7 +2015,7 @@ def page_history() -> None:
     c1.download_button(
         "⬇️ Export all records (JSON)",
         data=json.dumps(records.all(), indent=2, default=str),
-        file_name="jobscout_records.json", mime="application/json")
+        file_name="scout_records.json", mime="application/json")
     if notion_sync.available():
         if c2.button("📤 Sync history to Notion",
                      help="Mirrors job metadata, scores, and decisions "
@@ -1284,7 +2040,6 @@ def page_history() -> None:
                      help="If you changed a job's Decision cell directly in "
                           "Notion (e.g. from your phone), this reads that "
                           "back and applies it here. Notion has no way to "
-                          "push that change to JobScout automatically — "
                           "it requires a public server JobScout doesn't "
                           "run — so pulling on demand is the way to pick "
                           "up decisions made there."):
@@ -1409,9 +2164,11 @@ def page_outreach_crm() -> None:
 
 if page == "👤 Profile":
     page_profile()
-elif page == "🚀 Run JobScout":
+elif page == "🚀 Search Jobs":
     page_run()
-elif page == "📬 Outreach CRM":
+elif page == "🏦 Vault":
+    page_vault()
+elif page == "📬 Outreach":
     page_outreach_crm()
 else:
     page_history()

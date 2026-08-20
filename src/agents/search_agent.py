@@ -20,11 +20,10 @@ def build_query(profile: dict, page: int = 1) -> dict:
     prefs = profile.get("preferences", {})
     roles = prefs.get("target_roles", [])
     # Broaden by default so exact-phrase role titles don't starve recall
-    # (see src/query_expansion.py); precision is the scorer's job. Opt out
-    # with strict_keyword_match: true for verbatim-only matching.
-    skills = prefs.get("must_haves", []) + prefs.get("skills", [])
+    # (see src/query_expansion.py); precision is the scorer's job.
+    # Resume skills/details are parsed for profile scoring, not used to starve job board queries.
     keywords = (roles if prefs.get("strict_keyword_match")
-                else expand_keywords(roles, prefs.get("employment_types"), skills=skills))
+                else expand_keywords(roles, prefs.get("employment_types")))
     locs = prefs.get("locations", [])
     clean_locs = []
     indian_cities = ("delhi", "ncr", "gurgaon", "gurugram", "noida", "bangalore", "bengaluru", "mumbai", "pune", "hyderabad", "chennai", "kolkata")
@@ -41,7 +40,7 @@ def build_query(profile: dict, page: int = 1) -> dict:
         "keywords": keywords,
         "locations": clean_locs,
         "remote_only": prefs.get("remote_preference") == "remote_only",
-        "limit_per_source": 25,
+        "limit_per_source": 12,  # capped at 12 per board for faster results
         "page": page,
     }
 

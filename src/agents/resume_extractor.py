@@ -14,7 +14,7 @@ Analyze the candidate's resume thoroughly.
 Extract the candidate's personal details, infer their career trajectory, and recommend the best-matching target job roles, seniority level, core skills, and industry categories for their job hunt.
 
 Guidelines:
-1. target_roles: Suggest 5-8 realistic, high-opportunity job titles and keywords directly aligned with their actual experience level, education (e.g. MBA, Engineering, etc.), domain focus, and skills (e.g. for marketing: 'Digital Marketing Specialist', 'Growth Marketing Associate', 'Influencer Marketing Executive', 'Brand Strategist', 'Social Media Manager', 'Performance Marketing Specialist', etc.).
+1. target_roles: Suggest 5-8 realistic, high-opportunity job titles and keywords directly aligned with their actual experience level, education (e.g. MBA, Engineering, etc.), domain focus, and skills (e.g. for marketing: 'Digital Marketing Specialist', 'Growth Marketing Associate', 'Influencer Marketing Executive', 'Brand Strategist', 'Social Media Manager', 'Performance Marketing Specialist', etc.). If the candidate is in Marketing, strictly focus on pure marketing roles and avoid sales/sales-marketing/direct sales titles.
 2. skills: Extract 6-10 high-value, specific skills and domain proficiencies evident in the resume.
 3. seniority: Determine whether they are entry, junior, mid, senior, or staff (e.g. MBA students/recent grads should include ['junior', 'internship', 'mid']).
 4. industries: Extract 3-5 relevant industries.

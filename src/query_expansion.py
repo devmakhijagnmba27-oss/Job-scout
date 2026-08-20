@@ -38,7 +38,8 @@ _SENIORITY = {
 _ROLE_NOUNS = {
     "engineer", "scientist", "researcher", "developer", "analyst",
     "specialist", "manager", "architect", "consultant", "intern",
-    "lead", "director",
+    "lead", "director", "associate", "executive", "coordinator",
+    "trainee", "officer", "strategist",
 }
 
 # Abbreviation equivalence classes: if ANY member appears as a whole word
@@ -54,15 +55,17 @@ _EQUIV_CLASSES: list[set[str]] = [
     {"data science", "data scientist"},
     {"data analytics", "data analyst", "business intelligence", "bi"},
     {"software engineer", "software engineering", "swe"},
-    # Marketing / Growth / Brand / Social Media
-    {"digital marketing", "digital marketer", "growth marketing", "growth marketer"},
-    {"social media", "social media marketing", "social media manager", "smm"},
-    {"product marketing", "product marketing manager", "pmm"},
-    {"performance marketing", "growth marketing", "paid media", "sem", "ppc"},
-    {"brand marketing", "brand strategy", "brand manager", "brand strategist"},
-    {"influencer marketing", "creator marketing", "influencer management"},
-    {"content marketing", "content strategy", "content strategist"},
-    {"search engine optimization", "seo"},
+    # Marketing / Growth / Brand / Social Media / Digital
+    {"marketing", "digital marketing", "marketing specialist", "marketing manager", "marketing associate", "marketing executive", "marketing coordinator"},
+    {"digital marketing", "digital marketer", "growth marketing", "growth marketer", "online marketing"},
+    {"social media", "social media marketing", "social media manager", "smm", "social media specialist", "social media executive"},
+    {"product marketing", "product marketing manager", "pmm", "product marketing specialist"},
+    {"performance marketing", "growth marketing", "paid media", "sem", "ppc", "paid advertising", "media buyer"},
+    {"brand marketing", "brand strategy", "brand manager", "brand strategist", "brand specialist", "brand executive"},
+    {"influencer marketing", "creator marketing", "influencer management", "influencer relations"},
+    {"content marketing", "content strategy", "content strategist", "content specialist", "content creator", "copywriter"},
+    {"search engine optimization", "seo", "seo specialist", "seo executive"},
+    {"email marketing", "email marketing specialist", "lifecycle marketing", "crm marketing"},
     # Business / Product / Operations / HR
     {"product management", "product manager", "pm"},
     {"business development", "bizdev", "bdr", "sdr"},

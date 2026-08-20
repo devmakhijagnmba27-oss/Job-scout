@@ -112,13 +112,67 @@ def audit(tool: str, inputs: dict, actor: str = "orchestrator") -> None:
 # Deterministic filters (not prompt-injectable)
 # ---------------------------------------------------------------------------
 
+_SALES_TITLE_PATTERNS = [
+    r"\bsales\b",
+    r"\bbusiness\s+development\b",
+    r"\bbizdev\b",
+    r"\bbdr\b",
+    r"\bsdr\b",
+    r"\baccount\s+executive\b",
+    r"\binside\s+sales\b",
+    r"\bfield\s+sales\b",
+    r"\bdirect\s+sales\b",
+    r"\bchannel\s+sales\b",
+    r"\btelesales\b",
+    r"\btelemarketing\b",
+    r"\bcold\s+call",
+    r"\bkey\s+account\s+manager\b",
+    r"\bclient\s+acquisition\b",
+    r"\blead\s+gen(?:eration)?\s+(?:rep|executive|specialist|associate)\b",
+]
+
+_SALES_DESC_PATTERNS = [
+    r"\b100%\s+commission\b",
+    r"\bcommission\s+only\b",
+    r"\bcommission-only\b",
+    r"\bdoor\s+to\s+door\b",
+    r"\bcold\s+calling\s+prospective\b",
+    r"\bcold\s+calling\s+leads\b",
+]
+
+
+def is_sales_role(title: str, description: str = "") -> bool:
+    """Strictly identify whether a job is a sales or sales-marketing role.
+
+    Matches job titles indicating sales functions (e.g. Sales Executive,
+    Sales & Marketing, Business Development, BDR/SDR, Account Executive,
+    Telesales) and heavy quota/commission sales descriptions, while safely
+    allowing pure marketing roles that merely mention collaborating with
+    sales teams.
+    """
+    t = (title or "").lower()
+    for pat in _SALES_TITLE_PATTERNS:
+        if re.search(pat, t, re.I):
+            return True
+
+    d = (description or "").lower()
+    for pat in _SALES_DESC_PATTERNS:
+        if re.search(pat, d, re.I):
+            return True
+
+    return False
+
+
 def violates_dealbreakers(job_text: str, dealbreakers: list[str]) -> str | None:
     """Return the matched dealbreaker, or None. Plain substring matching in
     Python — a malicious job description cannot talk its way past this the
     way it might prompt-inject an LLM judge."""
     t = job_text.lower()
     for db in dealbreakers:
-        if db.strip() and db.strip().lower() in t:
+        db_clean = db.strip().lower()
+        if not db_clean:
+            continue
+        if db_clean in t:
             return db
     return None
 
