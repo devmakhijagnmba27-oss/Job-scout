@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCOUT // STARK INDUSTRIES HUD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <!-- Background Canvas: Hologram Radar & Supersonic Plasma Streaks -->
+    <canvas id="stark-canvas"></canvas>
+
+    <div class="app-layout">
+        <!-- Sidebar: Stark Telemetry & Navigation -->
+        <aside class="sidebar">
+            <div class="arc-header">
+                <div class="arc-reactor-core">⚛️</div>
+                <div class="brand-text">
+                    <div class="brand-title">SCOUT</div>
+                    <div class="brand-sub">STARK INDUSTRIES // HUD</div>
+                </div>
+            </div>
+            <div class="telemetry-bar">
+                <span class="telemetry-online">● ARC: 100% ONLINE</span>
+                <span class="telemetry-tag">MK-LXXXV</span>
+            </div>
+
+            <!-- Navigation Items -->
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="profile">
+                    <span class="nav-icon">👤</span> Your Profile
+                </button>
+                <button class="nav-item" data-tab="search">
+                    <span class="nav-icon">🚀</span> Search Jobs
+                </button>
+                <button class="nav-item" data-tab="vault">
+                    <span class="nav-icon">🏦</span> History Vault
+                </button>
+                <button class="nav-item" data-tab="history">
+                    <span class="nav-icon">📚</span> Job History
+                </button>
+                <button class="nav-item" data-tab="outreach">
+                    <span class="nav-icon">📬</span> Outreach CRM
+                </button>
+            </nav>
+
+            <div class="sidebar-stats">
+                <div class="stat-card" id="stat-reviewed-card">
+                    <div class="stat-label">JOBS REVIEWED</div>
+                    <div class="stat-value" id="stat-reviewed">0</div>
+                </div>
+                <div class="stat-card" id="stat-vault-card">
+                    <div class="stat-label">IN VAULT</div>
+                    <div class="stat-value" id="stat-vault">0</div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div>SYS: VERCEL EDGE CDN</div>
+                <div id="ai-model-tag">AI: CLAUDE / GEMINI</div>
+            </div>
+        </aside>
+
+        <!-- Main Content View -->
+        <main class="main-content">
+            <!-- Global Laser Alert Banner -->
+            <div id="laser-banner" class="laser-banner hidden"></div>
+
+            <!-- TAB 1: Profile View -->
+            <section id="tab-profile" class="tab-pane active">
+                <div class="pane-header">
+                    <h1 class="glow-title">👤 YOUR PROFILE</h1>
+                    <p class="pane-subtitle">Autonomous career telemetry. Profile data is stored locally and securely.</p>
+                </div>
+
+                <!-- Auto Extract Resume Box -->
+                <div class="hud-card extract-card">
+                    <div class="hud-card-header">
+                        <span class="hud-tag">✨ J.A.R.V.I.S. AUTO-PARSER</span>
+                        <h3>Auto-Extract Target Roles & Skills from Resume</h3>
+                    </div>
+                    <p class="card-desc">Upload your PDF resume to let AI analyze experience, recommend target roles, and extract skills.</p>
+                    <div class="upload-row">
+                        <input type="file" id="resume-upload" accept="application/pdf" class="file-input">
+                        <button id="btn-extract-resume" class="btn btn-primary">
+                            ⚡ AUTO-EXTRACT PROFILE NOW
+                        </button>
+                    </div>
+                    <div id="extract-status" class="status-msg hidden"></div>
+                </div>
+
+                <!-- Profile Form -->
+                <div class="hud-card form-card">
+                    <div class="hud-card-header">
+                        <span class="hud-tag">TACTICAL PROFILE SETTINGS</span>
+                        <h3>Candidate Details & Target Roles</h3>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>FULL NAME</label>
+                            <input type="text" id="cand-name" placeholder="Tony Stark">
+                        </div>
+                        <div class="form-group">
+                            <label>EMAIL ADDRESS</label>
+                            <input type="email" id="cand-email" placeholder="tony@starkindustries.com">
+                        </div>
+                        <div class="form-group">
+                            <label>PHONE NUMBER</label>
+                            <input type="text" id="cand-phone" placeholder="+91 98765 43210">
+                        </div>
+                        <div class="form-group">
+                            <label>LOCATION / CITY</label>
+                            <input type="text" id="cand-location" placeholder="Delhi NCR, India">
+                        </div>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label>TARGET ROLES (Comma-separated)</label>
+                        <input type="text" id="pref-roles" placeholder="Digital Marketing Specialist, Growth Marketing, Brand Strategist">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label>CORE SKILLS (Comma-separated)</label>
+                        <input type="text" id="cand-skills" placeholder="Performance Marketing, SEO, Social Media Strategy, Growth Analytics">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label>BACKGROUND / BIO SUMMARY</label>
+                        <textarea id="cand-bio" rows="3" placeholder="Executive summary of career background and strengths..."></textarea>
+                    </div>
+
+                    <button id="btn-save-profile" class="btn btn-primary btn-large">
+                        💾 SAVE STARK PROFILE
+                    </button>
+                </div>
+            </section>
+
+            <!-- TAB 2: Search Jobs View -->
+            <section id="tab-search" class="tab-pane">
+                <div class="pane-header">
+                    <h1 class="glow-title">🚀 SEARCH JOBS</h1>
+                    <p class="pane-subtitle" id="search-subtitle">Scanning job boards across targeted marketing roles...</p>
+                </div>
+
+                <!-- Filter Controls -->
+                <div class="hud-card">
+                    <div class="hud-card-header">
+                        <span class="hud-tag">TACTICAL SEARCH PARAMETERS</span>
+                        <h3>Location & Workplace Filters</h3>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>💼 WORKPLACE TYPE</label>
+                            <select id="search-work-mode">
+                                <option value="Any Workplace">Any Workplace</option>
+                                <option value="Remote Only">Remote Only</option>
+                                <option value="Hybrid">Hybrid</option>
+                                <option value="On-site Only">On-site Only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>📍 LOCATION / STATE (ALL 28 STATES)</label>
+                            <select id="search-state">
+                                <option value="All Locations / Default">All Locations / Default</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>🎯 TARGET NEW JOBS TO SCORE</label>
+                            <input type="number" id="search-target-count" min="1" max="30" value="6">
+                        </div>
+                    </div>
+                    <button id="btn-run-search" class="btn btn-primary btn-large">
+                        🔎 ENGAGE SEARCH & SCORING
+                    </button>
+                </div>
+
+                <!-- Search Results Area -->
+                <div id="search-results-container">
+                    <div id="search-loading" class="loading-state hidden">
+                        <div class="spinner"></div>
+                        <div class="loading-text">ENGAGING SENSORS & SCORING CANDIDATES...</div>
+                    </div>
+                    <div id="search-cards-list" class="cards-list"></div>
+                </div>
+            </section>
+
+            <!-- TAB 3: History Vault View -->
+            <section id="tab-vault" class="tab-pane">
+                <div class="pane-header">
+                    <h1 class="glow-title">🏦 YOUR VAULT</h1>
+                    <p class="pane-subtitle">Approved positions ready for direct application. Scout never applies on your behalf.</p>
+                </div>
+
+                <div class="vault-metrics-row">
+                    <div class="metric-card">
+                        <div class="metric-title">APPROVED JOBS</div>
+                        <div class="metric-val" id="vault-count-badge">0</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">APPLY LINKS ACTIVE</div>
+                        <div class="metric-val" id="vault-links-badge">0</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">SYSTEM STATUS</div>
+                        <div class="metric-val text-cyan">READY</div>
+                    </div>
+                </div>
+
+                <div id="vault-list" class="cards-list">
+                    <!-- Dynamic Vault Cards -->
+                </div>
+            </section>
+
+            <!-- TAB 4: History View -->
+            <section id="tab-history" class="tab-pane">
+                <div class="pane-header">
+                    <h1 class="glow-title">📚 SCORED JOB HISTORY</h1>
+                    <p class="pane-subtitle">Comprehensive ledger of all scored postings, recurring skill gaps, and telemetry.</p>
+                </div>
+
+                <!-- Skill Gaps Aggregation -->
+                <div class="hud-card">
+                    <div class="hud-card-header">
+                        <span class="hud-tag">TELEMETRY ANALYSIS</span>
+                        <h3>Recurring Score Dimensions</h3>
+                    </div>
+                    <div id="gaps-container" class="gaps-list"></div>
+                </div>
+
+                <!-- History Filter & List -->
+                <div class="hud-card">
+                    <div class="hud-card-header">
+                        <span class="hud-tag">RECORD LEDGER</span>
+                        <h3>All Evaluated Postings</h3>
+                    </div>
+                    <div id="history-list" class="cards-list"></div>
+                </div>
+            </section>
+
+            <!-- TAB 5: Outreach View -->
+            <section id="tab-outreach" class="tab-pane">
+                <div class="pane-header">
+                    <h1 class="glow-title">📬 OUTREACH CRM</h1>
+                    <p class="pane-subtitle">Recruiter contact discovery & multi-touch cold email sequences.</p>
+                </div>
+                <div id="outreach-container" class="cards-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal: Cover Letter & Resume Tweaks -->
+    <div id="letter-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-job-title">✉️ TAILORED APPLICATION MATERIALS</h3>
+                <button class="modal-close" id="btn-close-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <label>COVER LETTER</label>
+                <textarea id="modal-letter-text" rows="12"></textarea>
+                <label style="margin-top:1rem;">SUGGESTED RESUME TWEAKS</label>
+                <div id="modal-tweaks-text" class="tweaks-box"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
